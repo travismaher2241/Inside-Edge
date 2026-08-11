@@ -26,7 +26,8 @@ interface ClubSessionWizardProps {
   players: Player[];
   savedTemplates: SavedClubTemplate[];
   rollingLedger: RollingFairnessLedger[];
-  onSaveSession: (session: ClubTrainingSession) => void;
+  selectedTemplate?: SavedClubTemplate;
+  onFinalise: (session: ClubTrainingSession, action: 'save' | 'launch') => void | Promise<void>;
   onSaveTemplate: (template: SavedClubTemplate) => void;
   onClose: () => void;
 }
@@ -37,25 +38,28 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   players,
   savedTemplates,
   rollingLedger,
-  onSaveSession,
+  selectedTemplate,
+  onFinalise,
   onSaveTemplate,
   onClose
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Step 1: Session Setup
   const [title, setTitle] = useState<string>('Club Thursday Training Session');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState<string>('18:00');
   const [finishTime, setFinishTime] = useState<string>('19:30');
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => teams.map(t => t.id));
-  const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>(() => resources.map(r => r.id));
+  const [venueFacilityId, setVenueFacilityId] = useState<string>(() => resources.find(resource => resource.active)?.facilityId ?? 'fac-1');
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => teams.filter(team => team.active !== false).map(team => team.id));
+  const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>(() => resources.filter(resource => resource.active).map(resource => resource.id));
   const [rotationBlockMins, setRotationBlockMins] = useState<number>(12);
   const [sessionObjectives, setSessionObjectives] = useState<string[]>([
     'New-ball decision making',
     'T20 Middle overs scenario',
     'Death bowling & yorkers'
   ]);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Step 2: Player Availability Records (Player-controlled info only)
   const [availabilityRecords, setAvailabilityRecords] = useState<Record<string, PlayerAvailabilityRecord>>(() => {
@@ -103,6 +107,24 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   // Error State
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (!selectedTemplate) return;
+    setRotationBlockMins(selectedTemplate.rotationDurationMinutes);
+    setSessionObjectives(selectedTemplate.sessionObjectives);
+    if (selectedTemplate.includedTeamIds?.length) setSelectedTeamIds(selectedTemplate.includedTeamIds);
+    const resourceTypes = new Set(selectedTemplate.resourceTypeRules ?? selectedTemplate.teamGroupRules.map(rule => rule.allocatedResourceType));
+    const matchingIds = resources.filter(resource => resource.active && resourceTypes.has(resource.type)).map(resource => resource.id);
+    if (matchingIds.length) setSelectedResourceIds(matchingIds);
+  }, [selectedTemplate, resources]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmitting) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSubmitting, onClose]);
+
   // Derived Active Attending Players
   const attendingPlayers = useMemo(() => {
     const selectedSquadIds = new Set(teams.filter(t => selectedTeamIds.includes(t.id)).flatMap(t => t.squadPlayerIds || []));
@@ -116,7 +138,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
 
   // Derived Selected Resources
   const activeResources = useMemo(() => {
-    return resources.filter(r => selectedResourceIds.includes(r.id));
+    return resources.filter(r => r.active && selectedResourceIds.includes(r.id));
   }, [resources, selectedResourceIds]);
 
   // Calculated Session Feasibility
@@ -225,7 +247,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
     }));
   };
 
-  const handleFinalise = () => {
+  const handleFinalise = async (action: 'save' | 'launch') => {
+    if (isSubmitting) return;
     if (selectedTeamIds.length === 0) {
       setErrorMessage('Please select at least 1 team for this training session.');
       return;
@@ -239,6 +262,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       return;
     }
 
+    setIsSubmitting(true);
     const newSession: ClubTrainingSession = {
       id: `csess-${Date.now()}`,
       clubId: 'club-1',
@@ -246,7 +270,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       date,
       startTime,
       finishTime,
-      venueFacilityId: 'fac-1',
+      venueFacilityId,
       includedTeamIds: selectedTeamIds,
       availableResourceIds: selectedResourceIds,
       expectedPlayerIds: attendingPlayers.map(p => p.id),
@@ -259,53 +283,77 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       rotationPlan: engineOutput.rotationBlocks,
       manualLocks,
       fairnessSettings: { targetEqualBattingMinutes: feasibilityResult.fairBattingMinutesPerPlayer },
-      status: 'planned',
+      blocks: engineOutput.rotationBlocks.map(block => ({
+        id: block.blockId,
+        title: `Rotation ${block.blockIndex + 1}`,
+        type: 'rotation',
+        durationMinutes: block.durationMinutes,
+        objective: sessionObjectives.join(', '),
+        location: block.resourceAssignments.map(item => item.resourceName).join(', '),
+        rotation: block
+      })),
+      activeBlockIndex: 0,
+      activeRotationIndex: 0,
+      status: action === 'launch' ? 'live' : 'planned',
       warnings: engineOutput.warnings
     };
-
-    onSaveSession(newSession);
-    onClose();
+    try {
+      await onFinalise(newSession, action);
+      onClose();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the session. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
-      <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '780px', maxHeight: '92vh', overflowY: 'auto' }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="club-session-wizard-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto' }}>
         {/* Modal Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>
               CLUB TRAINING PLANNER WIZARD
             </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Create Whole-Club Training Session</h2>
+
+            <h2 id="club-session-wizard-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>Create whole-club training session</h2>
           </div>
-          <button onClick={onClose} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
+          <button aria-label="Close session planner" onClick={onClose} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
             ✕
           </button>
         </div>
 
-        {/* 7-Step Navigation Bar */}
+        {/* Four-stage planning workflow */}
         <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', marginBottom: '16px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px' }}>
-          {[1, 2, 3, 4, 5, 6, 7].map(sNum => (
+          {(['Session', 'People', 'Allocate', 'Review'] as const).map((label, index) => {
+            const stage = (index + 1) as 1 | 2 | 3 | 4;
+            const prerequisitesMet = stage === 1
+              || (stage === 2 && selectedTeamIds.length > 0)
+              || (stage === 3 && selectedTeamIds.length > 0 && attendingPlayers.length > 0)
+              || (stage === 4 && Boolean(engineOutput));
+            return (
             <button
-              key={sNum}
+              key={label}
               type="button"
-              onClick={() => setStep(sNum as any)}
+              onClick={() => prerequisitesMet && setStep(stage)}
+              disabled={!prerequisitesMet}
               style={{
                 flex: 1,
                 minWidth: '70px',
                 padding: '6px 2px',
                 borderRadius: '6px',
                 border: 'none',
-                background: step === sNum ? 'var(--primary-green)' : 'transparent',
-                color: step === sNum ? '#fff' : 'var(--text-secondary)',
+                background: step === stage ? 'var(--primary-green)' : 'transparent',
+                color: step === stage ? '#fff' : 'var(--text-secondary)',
                 fontWeight: 700,
                 fontSize: '0.7rem',
-                cursor: 'pointer'
+                cursor: prerequisitesMet ? 'pointer' : 'not-allowed',
+                opacity: prerequisitesMet ? 1 : 0.45
               }}
             >
-              STEP {sNum}
+              {stage}. {label}
             </button>
-          ))}
+          );})}
         </div>
 
         {/* Error Alert */}
@@ -359,13 +407,20 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               </div>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(140px, 1fr)', gap: '10px' }}>
+              <label>Venue / facility<input value={venueFacilityId} onChange={event => setVenueFacilityId(event.target.value)} placeholder="Facility ID or venue" /></label>
+              <label>Rotation minutes<input type="number" min={5} value={rotationBlockMins} onChange={event => setRotationBlockMins(Math.max(5, Number(event.target.value)))} /></label>
+            </div>
+            <label>Session objectives<textarea rows={3} value={sessionObjectives.join('\n')} onChange={event => setSessionObjectives(event.target.value.split('\n').map(value => value.trim()).filter(Boolean))} /></label>
+            <div role="status" className="badge badge-green" style={{ width: 'fit-content' }}>Session duration: {sessionDurationMins} minutes</div>
+
             {/* Dynamic Team Selector */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '6px', display: 'block' }}>
-                INCLUDED CLUB TEAMS ({selectedTeamIds.length}/{teams.length})
+                INCLUDED CLUB TEAMS ({selectedTeamIds.length}/{teams.filter(team => team.active !== false).length})
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {teams.map(t => {
+                {teams.filter(team => team.active !== false).map(t => {
                   const isSel = selectedTeamIds.includes(t.id);
                   return (
                     <button
@@ -393,10 +448,10 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
             {/* Dynamic Facility / Resource Selector */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '6px', display: 'block' }}>
-                AVAILABLE TRAINING RESOURCES NIGHT ({selectedResourceIds.length}/{resources.length})
+                AVAILABLE TRAINING RESOURCES NIGHT ({selectedResourceIds.length}/{resources.filter(resource => resource.active).length})
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {resources.map(r => {
+                {resources.filter(resource => resource.active).map(r => {
                   const isSel = selectedResourceIds.includes(r.id);
                   return (
                     <button
@@ -427,7 +482,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
           </div>
         )}
 
-        {/* STEP 2: Attendance Board */}
+        {/* STEP 2: People — attendance, availability and staff-assigned roles */}
         {step === 2 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -441,7 +496,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               </div>
             </div>
 
-            <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {players.map(p => {
                 const rec = availabilityRecords[p.id] || { playerId: p.id, status: 'attending' };
                 const isAttending = rec.status === 'attending';
@@ -485,22 +540,12 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               })}
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(1)} style={{ flex: 1 }}>← BACK</button>
-              <button className="btn btn-primary" onClick={() => setStep(3)} style={{ flex: 1 }}>NEXT: STAFF ROLES →</button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Staff-Controlled Roles & Requests */}
-        {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ background: 'rgba(229, 169, 60, 0.1)', border: '1px solid var(--border-gold)', padding: '10px 12px', borderRadius: '8px', fontSize: '0.75rem', color: 'var(--accent-gold)' }}>
               <ShieldAlert size={14} style={{ display: 'inline', marginRight: '4px' }} />
               <strong>CRITICAL PERMISSION RULE:</strong> Only captains and coaches assign training roles, bowling bands, priority preparation, and workload limits. Player requests are non-binding comments until staff approved.
             </div>
 
-            <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {attendingPlayers.map(p => {
                 const staff = staffAssignments[p.id] || {
                   playerId: p.id,
@@ -579,17 +624,19 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(2)} style={{ flex: 1 }}>← BACK</button>
-              <button className="btn btn-primary" onClick={() => setStep(4)} style={{ flex: 1 }}>NEXT: ALLOCATION BOARD →</button>
+              <button className="btn btn-secondary" onClick={() => setStep(1)} style={{ flex: 1 }}>← BACK</button>
+              <button className="btn btn-primary" onClick={() => setStep(3)} style={{ flex: 1 }}>NEXT: ALLOCATE →</button>
             </div>
           </div>
         )}
 
-        {/* STEP 4: Facility Allocation & Saved Templates */}
-        {step === 4 && (
+        {/* STEP 3: Allocate — templates, centre wicket and generated schedule */}
+        {step === 3 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <TrainingTemplateManager
               templates={savedTemplates}
+              teams={teams}
+              resources={resources}
               onApplyTemplate={tmpl => {
                 setRotationBlockMins(tmpl.rotationDurationMinutes);
                 setSessionObjectives(tmpl.sessionObjectives);
@@ -608,16 +655,6 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               />
             )}
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(3)} style={{ flex: 1 }}>← BACK</button>
-              <button className="btn btn-primary" onClick={() => setStep(5)} style={{ flex: 1 }}>NEXT: GENERATE ROTATIONS →</button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 5: Rotation Generation Preview */}
-        {step === 5 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
               GENERATED SCHEDULE PREVIEW ({engineOutput?.rotationBlocks.length || 0} ROTATION BLOCKS)
             </div>
@@ -642,15 +679,25 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
             ))}
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(4)} style={{ flex: 1 }}>← BACK</button>
-              <button className="btn btn-primary" onClick={() => setStep(6)} style={{ flex: 1 }}>NEXT: REVIEW FEASIBILITY & FAIRNESS →</button>
+              <button className="btn btn-secondary" onClick={() => setStep(2)} style={{ flex: 1 }}>← BACK TO PEOPLE</button>
+              <button className="btn btn-primary" onClick={() => setStep(4)} disabled={!engineOutput} style={{ flex: 1 }}>REVIEW PLAN →</button>
             </div>
           </div>
         )}
 
-        {/* STEP 6: Review Fairness & Feasibility */}
-        {step === 6 && (
+        {/* STEP 4: Review — feasibility, fairness, warnings and launch */}
+        {step === 4 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {engineOutput && (
+              <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                {[
+                  ['Theoretical capacity', engineOutput.capacityMetrics.theoreticalCapacityMinutes],
+                  ['Staffable capacity', engineOutput.capacityMetrics.staffableCapacityMinutes],
+                  ['Actually allocated', engineOutput.capacityMetrics.actuallyAllocatedCapacityMinutes],
+                  ['Unused capacity', engineOutput.capacityMetrics.unusedCapacityMinutes]
+                ].map(([label, value]) => <div key={label as string} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px' }}><div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{label}</div><strong style={{ color: 'var(--accent-gold)', fontSize: '1.1rem' }}>{value} min</strong></div>)}
+              </div>
+            )}
             {/* Feasibility Alert Card */}
             <div className="card" style={{ padding: '14px', borderLeft: feasibilityResult.isFeasible ? '4px solid #4ade80' : '4px solid #f97316' }}>
               <div style={{ fontWeight: 800, fontSize: '0.9rem', color: feasibilityResult.isFeasible ? '#4ade80' : '#f97316', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -679,7 +726,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 date,
                 startTime,
                 finishTime,
-                venueFacilityId: 'fac-1',
+                venueFacilityId,
                 includedTeamIds: selectedTeamIds,
                 availableResourceIds: selectedResourceIds,
                 expectedPlayerIds: attendingPlayers.map(p => p.id),
@@ -692,6 +739,9 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 rotationPlan: engineOutput.rotationBlocks,
                 manualLocks,
                 fairnessSettings: { targetEqualBattingMinutes: feasibilityResult.fairBattingMinutesPerPlayer },
+                blocks: [],
+                activeBlockIndex: 0,
+                activeRotationIndex: 0,
                 status: 'draft',
                 warnings: engineOutput.warnings
               }, players) : []}
@@ -700,30 +750,19 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               unsatisfiedSoftConstraints={engineOutput?.unsatisfiedSoftConstraints}
             />
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(5)} style={{ flex: 1 }}>← BACK</button>
-              <button className="btn btn-gold" onClick={() => setStep(7)} style={{ flex: 1 }}>NEXT: FINALISE & LOCK →</button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 7: Finalise & Run */}
-        {step === 7 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'center' }}>
-            <div className="card" style={{ padding: '24px', borderLeft: '4px solid var(--accent-gold)' }}>
-              <Check size={36} color="var(--accent-gold)" style={{ margin: '0 auto 10px auto' }} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Ready to Lock & Run Session</h3>
+            <div className="card" style={{ padding: '20px', borderLeft: '4px solid var(--accent-gold)', textAlign: 'center' }}>
+              <Check size={32} color="var(--accent-gold)" style={{ margin: '0 auto 10px auto' }} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Ready to Lock & Run Session</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
                 Your training schedule for "{title}" ({attendingPlayers.length} players across {activeResources.length} resources) is calculated and ready.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(6)} style={{ flex: 1 }}>
-                ← BACK TO AUDIT
-              </button>
-              <button className="btn btn-gold" onClick={handleFinalise} style={{ flex: 2 }}>
-                <Check size={16} /> LOCK & LAUNCH LIVE MODE
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+              <button className="btn btn-secondary" onClick={() => setStep(3)} style={{ flex: 1 }}>← BACK TO ALLOCATION</button>
+              <button className="btn btn-secondary" onClick={() => void handleFinalise('save')} disabled={isSubmitting} style={{ flex: 1 }}>SAVE & CLOSE</button>
+              <button className="btn btn-gold" onClick={() => void handleFinalise('launch')} disabled={isSubmitting} style={{ flex: 2 }}>
+                <Check size={16} /> {isSubmitting ? 'SAVING…' : 'START LIVE SESSION'}
               </button>
             </div>
           </div>
