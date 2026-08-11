@@ -229,12 +229,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
       {/* Forgot Password Modal */}
       {isResetOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsResetOpen(false)}>
-          <div className="bottom-sheet-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="reset-password-title" className="bottom-sheet-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div id="reset-password-title" style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={18} color="var(--accent-gold)" /> Reset Password
               </div>
-              <button type="button" onClick={() => setIsResetOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <button type="button" aria-label="Close reset password dialog" onClick={() => setIsResetOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 ✕
               </button>
             </div>

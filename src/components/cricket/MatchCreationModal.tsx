@@ -90,6 +90,9 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="match-creation-title"
         className="bottom-sheet-content"
         onClick={e => e.stopPropagation()}
         style={{ maxWidth: '640px', padding: '20px' }}
@@ -100,9 +103,10 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)', letterSpacing: '0.5px' }}>
               MATCH FIXTURE & PRE-MATCH PLAN
             </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Add New Match</h2>
+            <h2 id="match-creation-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>Add New Match</h2>
           </div>
           <button
+            aria-label="Close match creation dialog"
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
           >

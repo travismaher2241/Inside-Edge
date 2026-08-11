@@ -21,6 +21,7 @@ export const CoachManagerModal: React.FC<CoachManagerModalProps> = ({ currentCoa
   const [selectedRole, setSelectedRole] = useState<CoachRole>('assistant_coach');
   const [generatedInviteUrl, setGeneratedInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<string>('');
 
   const loadData = async () => {
     setIsLoading(true);
@@ -41,26 +42,34 @@ export const CoachManagerModal: React.FC<CoachManagerModalProps> = ({ currentCoa
   }, []);
 
   const handleGenerateInvite = async () => {
+    setFeedback('');
     try {
       const invite = await createCoachInvite(selectedRole, currentCoach);
       const url = `${window.location.origin}/invite/${invite.token}`;
       setGeneratedInviteUrl(url);
       setInvites(prev => [invite, ...prev]);
     } catch (err: any) {
-      alert(err.message || 'Failed to generate invitation link.');
+      setFeedback(err.message || 'Failed to generate invitation link.');
     }
   };
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!generatedInviteUrl) return;
-    navigator.clipboard.writeText(generatedInviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(generatedInviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setFeedback('Could not copy the link. Select and copy it manually instead.');
+    }
   };
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coach-manager-title"
         className="bottom-sheet-content"
         style={{ maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
@@ -71,12 +80,18 @@ export const CoachManagerModal: React.FC<CoachManagerModalProps> = ({ currentCoa
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
               CLUB COACH MANAGEMENT
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>Coaches & Permissions</div>
+            <div id="coach-manager-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>Coaches & Permissions</div>
           </div>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <button type="button" aria-label="Close coach management" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <X size={24} />
           </button>
         </div>
+
+        {feedback && (
+          <div role="status" style={{ marginBottom: '14px', color: feedback.startsWith('Could not') ? '#f97316' : '#ef4444', fontSize: '0.85rem' }}>
+            {feedback}
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '8px', padding: '4px', marginBottom: '16px' }}>

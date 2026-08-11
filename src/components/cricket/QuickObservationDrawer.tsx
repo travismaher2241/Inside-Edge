@@ -41,15 +41,16 @@ export const QuickObservationDrawer: React.FC<QuickObservationDrawerProps> = ({
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
-      <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="quick-observation-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
               QUICK PLAYER OBSERVATION
             </div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{player.name}</div>
+            <div id="quick-observation-title" style={{ fontSize: '1.2rem', fontWeight: 800 }}>{player.name}</div>
           </div>
           <button
+            aria-label="Close observation drawer"
             onClick={onClose}
             style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
           >
