@@ -70,6 +70,11 @@ service cloud.firestore {
     match /activities/{activityId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /sessions/{sessionId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /matches/{matchId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /clubTeams/{teamId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /trainingResources/{resourceId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /clubTrainingSessions/{sessionId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /fairnessLedger/{playerId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /savedClubTemplates/{templateId} { allow read, write: if isAssistantOrHeadCoach(); }
 
     // 4. Role-Restricted Visibility Notes
     match /developmentFocuses/{focusId} {

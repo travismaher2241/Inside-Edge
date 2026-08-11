@@ -18,7 +18,12 @@ import type {
   MatchRecord,
   DevelopmentFocus,
   Observation,
-  CoachRole
+  CoachRole,
+  ClubTeam,
+  TrainingResource,
+  ClubTrainingSession,
+  RollingFairnessLedger,
+  SavedClubTemplate
 } from '../../types/cricket';
 import {
   SEED_TEAM,
@@ -28,7 +33,11 @@ import {
   SEED_SESSION,
   SEED_MATCH_RECORD,
   SEED_DEVELOPMENT_FOCUSES,
-  SEED_OBSERVATIONS
+  SEED_OBSERVATIONS,
+  SEED_CLUB_TEAMS,
+  SEED_TRAINING_RESOURCES,
+  SEED_FAIRNESS_LEDGER,
+  SEED_SAVED_TEMPLATES
 } from './seedData';
 
 // Document & Collection IDs
@@ -72,6 +81,11 @@ export async function seedDefaultFirestoreIfEmpty(): Promise<void> {
     SEED_OBSERVATIONS.forEach(o => {
       batch.set(doc(db, 'observations', o.id), { ...o, visibility: o.visibility || 'all_coaches' });
     });
+
+    SEED_CLUB_TEAMS.forEach(team => batch.set(doc(db, 'clubTeams', team.id), team));
+    SEED_TRAINING_RESOURCES.forEach(resource => batch.set(doc(db, 'trainingResources', resource.id), resource));
+    SEED_FAIRNESS_LEDGER.forEach(entry => batch.set(doc(db, 'fairnessLedger', entry.playerId), entry));
+    SEED_SAVED_TEMPLATES.forEach(template => batch.set(doc(db, 'savedClubTemplates', template.id), template));
 
     await batch.commit();
   } catch (err) {
@@ -229,5 +243,37 @@ export const CloudStorageEngine = {
   },
   addObservation: async (obs: Observation): Promise<void> => {
     await setDoc(doc(db, 'observations', obs.id), { ...obs, visibility: obs.visibility || 'all_coaches' });
+  },
+
+  subscribeToClubTeams: (callback: (teams: ClubTeam[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'clubTeams'), snap => callback(snap.empty ? SEED_CLUB_TEAMS : snap.docs.map(item => item.data() as ClubTeam))),
+  saveClubTeam: async (team: ClubTeam): Promise<void> => {
+    await setDoc(doc(db, 'clubTeams', team.id), team);
+  },
+
+  subscribeToTrainingResources: (callback: (resources: TrainingResource[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'trainingResources'), snap => callback(snap.empty ? SEED_TRAINING_RESOURCES : snap.docs.map(item => item.data() as TrainingResource))),
+  saveTrainingResource: async (resource: TrainingResource): Promise<void> => {
+    await setDoc(doc(db, 'trainingResources', resource.id), resource);
+  },
+
+  subscribeToClubSessions: (callback: (sessions: ClubTrainingSession[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'clubTrainingSessions'), snap => callback(snap.docs.map(item => item.data() as ClubTrainingSession))),
+  saveClubSession: async (session: ClubTrainingSession): Promise<void> => {
+    await setDoc(doc(db, 'clubTrainingSessions', session.id), session);
+  },
+
+  subscribeToFairnessLedger: (callback: (ledger: RollingFairnessLedger[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'fairnessLedger'), snap => callback(snap.empty ? SEED_FAIRNESS_LEDGER : snap.docs.map(item => item.data() as RollingFairnessLedger))),
+  saveFairnessLedger: async (ledger: RollingFairnessLedger[]): Promise<void> => {
+    const batch = writeBatch(db);
+    ledger.forEach(entry => batch.set(doc(db, 'fairnessLedger', entry.playerId), entry));
+    await batch.commit();
+  },
+
+  subscribeToSavedClubTemplates: (callback: (templates: SavedClubTemplate[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'savedClubTemplates'), snap => callback(snap.empty ? SEED_SAVED_TEMPLATES : snap.docs.map(item => item.data() as SavedClubTemplate))),
+  saveClubTemplate: async (template: SavedClubTemplate): Promise<void> => {
+    await setDoc(doc(db, 'savedClubTemplates', template.id), template);
   }
 };

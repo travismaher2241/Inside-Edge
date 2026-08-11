@@ -278,7 +278,215 @@ export interface ClubTeam {
   ageGroup: string;
   submissionToken: string;
   createdAt: string;
+  gradeOrDivision?: string;
+  squadPlayerIds?: string[];
+  displayOrder?: number;
+  active?: boolean;
+  captainIds?: string[];
+  coachIds?: string[];
+  defaultTrainingWindow?: { startTime: string; endTime: string };
+  preferredFacilityGroupId?: string;
+  notes?: string;
 }
+
+// -------------------------------------------------------------------
+// Club Training Planner Types (Dynamic Multi-Team & Multi-Facility)
+// -------------------------------------------------------------------
+
+export type TrainingResourceType =
+  | 'standard_net'
+  | 'spin_net'
+  | 'pace_new_ball_net'
+  | 'bowling_machine_net'
+  | 'centre_wicket'
+  | 'centre_wicket_half'
+  | 'fielding_area'
+  | 'wicketkeeping_station'
+  | 'fitness_area'
+  | 'custom';
+
+export interface TrainingResource {
+  id: string;
+  facilityId: string;
+  name: string;
+  type: TrainingResourceType;
+  active: boolean;
+  maxBatters: number;
+  minBowlers: number;
+  maxBowlers: number;
+  maxTotalParticipants: number;
+  requiresCoachOrLeader: boolean;
+  supportsLiveBatting: boolean;
+  supportsCentreWicket: boolean;
+  safetyNotes?: string;
+  equipmentRequirements?: string[];
+  availabilityWindow?: { startTime: string; endTime: string };
+}
+
+export type AvailabilityStatus = 'attending' | 'not_attending' | 'unsure';
+
+export interface PlayerAvailabilityRecord {
+  playerId: string;
+  status: AvailabilityStatus;
+  expectedArrivalTime?: string; // e.g. "18:00"
+  expectedDepartureTime?: string; // e.g. "19:30"
+  injurySorenessNotes?: string;
+  unableToTrainFully?: boolean;
+  leaveEarly?: boolean;
+  requestComment?: string; // Player-facing request e.g. "I would like to practise opening against swing"
+  requestApprovedByStaff?: boolean; // Staff approval flag
+}
+
+export type StaffTrainingBattingRole =
+  | 'new_ball_prep'
+  | 'top_order_prep'
+  | 'middle_order_prep'
+  | 'finishing_practice'
+  | 'lower_order_dev'
+  | 'general_rotation'
+  | 'return_to_play'
+  | 'limited_participation'
+  | 'none'
+  | 'custom';
+
+export type StaffTrainingBowlingRole =
+  | 'pace_focus'
+  | 'spin_focus'
+  | 'new_ball_focus'
+  | 'death_bowling_focus'
+  | 'general_rotation'
+  | 'none';
+
+export type BowlingTrainingBand = 'band_1_primary' | 'band_2_support' | 'band_3_developing' | 'restricted';
+
+export interface StaffPlayerAssignment {
+  playerId: string;
+  teamId?: string;
+  trainingBattingRole: StaffTrainingBattingRole;
+  trainingBowlingRole: StaffTrainingBowlingRole;
+  bowlingTrainingBand: BowlingTrainingBand;
+  wicketkeepingFocus?: boolean;
+  priorityBattingPrep?: boolean;
+  priorityBowlingPrep?: boolean;
+  matchupRequirements?: string[];
+  extraBattingAllocation?: boolean;
+  extraBattingReason?: string;
+  reducedBattingAllocation?: boolean;
+  workloadLimitDeliveries?: number;
+  developmentNotes?: string;
+  returnToPlayRestrictions?: string;
+}
+
+export interface CentreWicketRoleAssignment {
+  playerId: string;
+  role: 'batter' | 'bowler' | 'wicketkeeper' | 'close_fielder' | 'ring_fielder' | 'boundary_fielder' | 'next_bowler' | 'next_batting_pair' | 'rest';
+}
+
+export interface CentreWicketScenario {
+  scenarioId: string;
+  name: string;
+  targetRuns: number;
+  targetOversOrBalls: number;
+  wicketsRemaining: number;
+  battingPairs: Array<{ pairPlayerIds: [string, string]; allocatedOversOrBalls: number }>;
+  bowlingSpells: Array<{ bowlerPlayerId: string; oversOrDeliveries: number }>;
+  wicketkeeperId?: string;
+  namedLeaderId?: string;
+  assignments: CentreWicketRoleAssignment[];
+}
+
+export interface PriorityMatchup {
+  id: string;
+  batterPlayerId: string;
+  targetBowlerStyleOrId: string;
+  durationMinutes: number;
+  notes?: string;
+}
+
+export interface AllocationResourceAssignment {
+  resourceId: string;
+  resourceName: string;
+  leaderId?: string;
+  batterPlayerIds: string[];
+  bowlerPodPlayerIds: string[];
+  wicketkeeperPlayerIds: string[];
+  feederPlayerIds: string[];
+  fieldingPlayerIds: string[];
+  restPlayerIds: string[];
+  priorityMatchups?: PriorityMatchup[];
+  centreWicketScenario?: CentreWicketScenario;
+}
+
+export interface RotationBlockPlan {
+  blockId: string;
+  blockIndex: number;
+  durationMinutes: number;
+  startTime: string;
+  endTime: string;
+  resourceAssignments: AllocationResourceAssignment[];
+  unassignedPlayerIds: string[];
+  alerts: string[];
+}
+
+export interface ClubTrainingSession {
+  id: string;
+  clubId: string;
+  title: string;
+  date: string;
+  startTime: string;
+  finishTime: string;
+  venueFacilityId: string;
+  includedTeamIds: string[];
+  availableResourceIds: string[];
+  expectedPlayerIds: string[];
+  confirmedAttendingPlayerIds: string[];
+  availabilityRecords: Record<string, PlayerAvailabilityRecord>;
+  staffPlayerAssignments: Record<string, StaffPlayerAssignment>;
+  sessionObjectives: string[];
+  rotationDurationMinutes: number;
+  captainCoachAssignments: Array<{ staffId: string; role: string; assignedResourceId?: string }>;
+  rotationPlan: RotationBlockPlan[];
+  manualLocks: Record<string, boolean>; // e.g. `${blockIndex}_${resourceId}_${playerId}`
+  fairnessSettings: { targetEqualBattingMinutes: number };
+  status: 'draft' | 'planned' | 'live' | 'completed';
+  warnings: string[];
+  actualParticipationOutcomes?: Record<string, { battingMinutes: number; deliveriesBowled: number; centreWicketOvers: number }>;
+}
+
+export interface SessionFairnessRecord {
+  sessionId: string;
+  date: string;
+  playerId: string;
+  plannedBattingMinutes: number;
+  actualBattingMinutes: number;
+  extraBattingMinutesGranted: number;
+  extraBattingReason?: string;
+  deliveriesBowled: number;
+  centreWicketOvers: number;
+  missedOrShortenedMinutes: number;
+}
+
+export interface RollingFairnessLedger {
+  playerId: string;
+  totalSessionsAttended: number;
+  totalBattingMinutes: number;
+  totalDeliveriesBowled: number;
+  totalCentreWicketOvers: number;
+  accumulatedFairnessCreditMinutes: number;
+}
+
+export interface SavedClubTemplate {
+  id: string;
+  name: string;
+  description: string;
+  teamGroupRules: Array<{
+    teamQuery: 'all' | 'first_seconds' | 'remaining' | 'juniors' | 'seniors';
+    allocatedResourceType: TrainingResourceType;
+  }>;
+  rotationDurationMinutes: number;
+  sessionObjectives: string[];
+}
+
 
 export interface MatchReport {
   id: string;

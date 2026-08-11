@@ -7,7 +7,7 @@ import {
   logoutCoach
 } from './modules/cricket/authService';
 import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser } from './types/cricket';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
@@ -20,11 +20,11 @@ import { LoginView } from './views/LoginView';
 import { AcceptInviteView } from './views/AcceptInviteView';
 import { CoachManagerModal } from './components/cricket/CoachManagerModal';
 import { QuickObservationDrawer } from './components/cricket/QuickObservationDrawer';
-import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS } from './modules/cricket/seedData';
+import { FieldBoardModal } from './components/cricket/FieldBoardModal';
+import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
 
 const LiveModeView = lazy(() => import('./views/LiveModeView').then(m => ({ default: m.LiveModeView })));
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
-const FieldBoardModal = lazy(() => import('./components/cricket/FieldBoardModal').then(m => ({ default: m.FieldBoardModal })));
 
 const TEST_ACCESS_COACH: CoachUser = {
   uid: 'test-access',
@@ -58,6 +58,11 @@ export function App() {
   const [selectedMatchId, setSelectedMatchId] = useState<string | undefined>(undefined);
   const [focuses, setFocuses] = useState<DevelopmentFocus[]>(SEED_DEVELOPMENT_FOCUSES);
   const [observations, setObservations] = useState<Observation[]>(SEED_OBSERVATIONS);
+  const [clubTeams, setClubTeams] = useState<ClubTeam[]>(SEED_CLUB_TEAMS);
+  const [trainingResources, setTrainingResources] = useState<TrainingResource[]>(SEED_TRAINING_RESOURCES);
+  const [clubSessions, setClubSessions] = useState<ClubTrainingSession[]>([]);
+  const [fairnessLedger, setFairnessLedger] = useState<RollingFairnessLedger[]>(SEED_FAIRNESS_LEDGER);
+  const [savedClubTemplates, setSavedClubTemplates] = useState<SavedClubTemplate[]>(SEED_SAVED_TEMPLATES);
 
   // Quick Observation Drawer State
   const [observedPlayer, setObservedPlayer] = useState<Player | null>(null);
@@ -104,6 +109,11 @@ export function App() {
     const unsubMatches = CloudStorageEngine.subscribeToMatches(setMatches);
     const unsubFocuses = CloudStorageEngine.subscribeToDevelopmentFocuses(role, setFocuses);
     const unsubObs = CloudStorageEngine.subscribeToObservations(role, setObservations);
+    const unsubClubTeams = CloudStorageEngine.subscribeToClubTeams(setClubTeams);
+    const unsubResources = CloudStorageEngine.subscribeToTrainingResources(setTrainingResources);
+    const unsubClubSessions = CloudStorageEngine.subscribeToClubSessions(setClubSessions);
+    const unsubFairness = CloudStorageEngine.subscribeToFairnessLedger(setFairnessLedger);
+    const unsubTemplates = CloudStorageEngine.subscribeToSavedClubTemplates(setSavedClubTemplates);
 
     return () => {
       unsubTeam();
@@ -114,6 +124,11 @@ export function App() {
       unsubMatches();
       unsubFocuses();
       unsubObs();
+      unsubClubTeams();
+      unsubResources();
+      unsubClubSessions();
+      unsubFairness();
+      unsubTemplates();
     };
   }, [authUser, coachProfile, isTestMode]);
 
@@ -200,6 +215,16 @@ export function App() {
     } else {
       CloudStorageEngine.updatePlayer(updatedPlayer);
     }
+  };
+
+  const handleSaveClubSession = (updatedSession: ClubTrainingSession) => {
+    setClubSessions(prev => [updatedSession, ...prev.filter(item => item.id !== updatedSession.id)]);
+    if (!isTestMode) void CloudStorageEngine.saveClubSession(updatedSession);
+  };
+
+  const handleSaveClubTemplate = (template: SavedClubTemplate) => {
+    setSavedClubTemplates(prev => [...prev.filter(item => item.id !== template.id), template]);
+    if (!isTestMode) void CloudStorageEngine.saveClubTemplate(template);
   };
 
 
@@ -340,6 +365,13 @@ export function App() {
           onUpdateSession={handleUpdateSession}
           onStartLiveSession={() => setIsLiveMode(true)}
           onOpenQuickObservation={p => setObservedPlayer(p)}
+          clubTeams={clubTeams}
+          trainingResources={trainingResources}
+          clubSession={clubSessions[0]}
+          fairnessLedger={fairnessLedger}
+          savedClubTemplates={savedClubTemplates}
+          onSaveClubSession={handleSaveClubSession}
+          onSaveClubTemplate={handleSaveClubTemplate}
         />
       )}
 
@@ -402,5 +434,3 @@ export function App() {
 }
 
 export default App;
-
-

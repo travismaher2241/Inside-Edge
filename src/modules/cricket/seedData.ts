@@ -1,6 +1,6 @@
 // Seed Data for Inside Edge Cricket Coaching App
 
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, CompetitionRulesProfile } from '../../types/cricket';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, CompetitionRulesProfile, ClubTeam, TrainingResource, SavedClubTemplate, RollingFairnessLedger } from '../../types/cricket';
 
 export const SEED_TEAM: Team = {
   id: 'team-1',
@@ -682,4 +682,196 @@ export const SEED_RULES_PROFILES: CompetitionRulesProfile[] = [
     sourceNote: 'Default Two-Day preset. Must be checked against local competition playing conditions.',
   },
 ];
+
+export const SEED_CLUB_TEAMS: ClubTeam[] = [
+  {
+    id: 'ct-1',
+    name: '1st XI Senior Men',
+    ageGroup: 'Seniors',
+    gradeOrDivision: '1st Grade Premier',
+    submissionToken: '1st-xi-token-2026',
+    createdAt: '2026-08-01T00:00:00Z',
+    displayOrder: 1,
+    active: true,
+    squadPlayerIds: ['p-1', 'p-2', 'p-3', 'p-6'],
+    captainIds: ['p-1'],
+    defaultTrainingWindow: { startTime: '18:00', endTime: '20:00' }
+  },
+  {
+    id: 'ct-2',
+    name: '2nd XI Senior Men',
+    ageGroup: 'Seniors',
+    gradeOrDivision: '2nd Grade',
+    submissionToken: '2nd-xi-token-2026',
+    createdAt: '2026-08-01T00:00:00Z',
+    displayOrder: 2,
+    active: true,
+    squadPlayerIds: ['p-4', 'p-5', 'p-7', 'p-8'],
+    captainIds: ['p-4'],
+    defaultTrainingWindow: { startTime: '18:00', endTime: '20:00' }
+  },
+  {
+    id: 'ct-3',
+    name: '3rd XI Senior Men',
+    ageGroup: 'Seniors',
+    gradeOrDivision: '3rd Grade',
+    submissionToken: '3rd-xi-token-2026',
+    createdAt: '2026-08-01T00:00:00Z',
+    displayOrder: 3,
+    active: true,
+    squadPlayerIds: ['p-9', 'p-10', 'p-11'],
+    captainIds: ['p-10'],
+    defaultTrainingWindow: { startTime: '18:00', endTime: '20:00' }
+  },
+  {
+    id: 'ct-4',
+    name: '4th XI Senior Men',
+    ageGroup: 'Seniors',
+    gradeOrDivision: '4th Grade',
+    submissionToken: '4th-xi-token-2026',
+    createdAt: '2026-08-01T00:00:00Z',
+    displayOrder: 4,
+    active: true,
+    squadPlayerIds: ['p-12', 'p-13', 'p-14'],
+    defaultTrainingWindow: { startTime: '18:00', endTime: '20:00' }
+  },
+  {
+    id: 'ct-5',
+    name: '5th XI Senior Men',
+    ageGroup: 'Seniors',
+    gradeOrDivision: '5th Grade',
+    submissionToken: '5th-xi-token-2026',
+    createdAt: '2026-08-01T00:00:00Z',
+    displayOrder: 5,
+    active: true,
+    squadPlayerIds: ['p-15', 'p-16'],
+    defaultTrainingWindow: { startTime: '18:00', endTime: '20:00' }
+  }
+];
+
+export const SEED_TRAINING_RESOURCES: TrainingResource[] = [
+  {
+    id: 'res-1',
+    facilityId: 'fac-1',
+    name: 'Net 1 - New Ball Seam',
+    type: 'pace_new_ball_net',
+    active: true,
+    maxBatters: 2,
+    minBowlers: 2,
+    maxBowlers: 4,
+    maxTotalParticipants: 8,
+    requiresCoachOrLeader: true,
+    supportsLiveBatting: true,
+    supportsCentreWicket: false,
+    safetyNotes: 'Helmets mandatory. High pace seam bowling.',
+    equipmentRequirements: ['Leather Balls', 'Leave Zone Cones']
+  },
+  {
+    id: 'res-2',
+    facilityId: 'fac-1',
+    name: 'Net 2 - Spin & Strike Rotation',
+    type: 'spin_net',
+    active: true,
+    maxBatters: 2,
+    minBowlers: 2,
+    maxBowlers: 4,
+    maxTotalParticipants: 8,
+    requiresCoachOrLeader: false,
+    supportsLiveBatting: true,
+    supportsCentreWicket: false,
+    safetyNotes: 'Keepers must wear face protection standing up.',
+    equipmentRequirements: ['Spin Target Cones']
+  },
+  {
+    id: 'res-3',
+    facilityId: 'fac-1',
+    name: 'Net 3 - Death Bowling & Machine',
+    type: 'bowling_machine_net',
+    active: true,
+    maxBatters: 2,
+    minBowlers: 1,
+    maxBowlers: 3,
+    maxTotalParticipants: 6,
+    requiresCoachOrLeader: true,
+    supportsLiveBatting: true,
+    supportsCentreWicket: false,
+    safetyNotes: 'Machine operator must wear helmet.',
+    equipmentRequirements: ['Bowling Machine', 'Dimple Balls', 'Yorker Mat']
+  },
+  {
+    id: 'res-4',
+    facilityId: 'fac-1',
+    name: 'Centre Wicket - Main Oval',
+    type: 'centre_wicket',
+    active: true,
+    maxBatters: 4,
+    minBowlers: 2,
+    maxBowlers: 6,
+    maxTotalParticipants: 16,
+    requiresCoachOrLeader: true,
+    supportsLiveBatting: true,
+    supportsCentreWicket: true,
+    safetyNotes: 'Ensure inner-ring fielders wear abdominal guards.',
+    equipmentRequirements: ['Match Balls', 'Field Boundary Cones', 'Scoreboard']
+  },
+  {
+    id: 'res-5',
+    facilityId: 'fac-1',
+    name: 'Outfield Fielding Area',
+    type: 'fielding_area',
+    active: true,
+    maxBatters: 0,
+    minBowlers: 0,
+    maxBowlers: 0,
+    maxTotalParticipants: 20,
+    requiresCoachOrLeader: false,
+    supportsLiveBatting: false,
+    supportsCentreWicket: false,
+    equipmentRequirements: ['Catching Bats', 'Katchet Boards', 'Soft Balls']
+  }
+];
+
+export const SEED_SAVED_TEMPLATES: SavedClubTemplate[] = [
+  {
+    id: 'tmpl-1',
+    name: 'Seniors Nets / Lower Grades Centre Wicket',
+    description: '1st XI & 2nd XI use Nets 1-3 for match prep. 3rd-5th XI use Centre Wicket scenario.',
+    teamGroupRules: [
+      { teamQuery: 'first_seconds', allocatedResourceType: 'pace_new_ball_net' },
+      { teamQuery: 'remaining', allocatedResourceType: 'centre_wicket' }
+    ],
+    rotationDurationMinutes: 12,
+    sessionObjectives: ['New-ball decision making', 'Centre-wicket chase scenario']
+  },
+  {
+    id: 'tmpl-2',
+    name: '1st & 2nd XI Centre Wicket / Other Teams Nets',
+    description: 'Top two grades take centre wicket for T20 scenario. Lower grades rotate through nets.',
+    teamGroupRules: [
+      { teamQuery: 'first_seconds', allocatedResourceType: 'centre_wicket' },
+      { teamQuery: 'remaining', allocatedResourceType: 'standard_net' }
+    ],
+    rotationDurationMinutes: 15,
+    sessionObjectives: ['T20 Middle overs scenario', 'Net technical repetition']
+  },
+  {
+    id: 'tmpl-3',
+    name: 'All-Club Mixed Net Rotations',
+    description: 'Whole club combined net rotations focusing on skill groups across teams.',
+    teamGroupRules: [
+      { teamQuery: 'all', allocatedResourceType: 'standard_net' }
+    ],
+    rotationDurationMinutes: 12,
+    sessionObjectives: ['Cross-squad integration', 'Skill pod rotation']
+  }
+];
+
+export const SEED_FAIRNESS_LEDGER: RollingFairnessLedger[] = SEED_PLAYERS.map(p => ({
+  playerId: p.id,
+  totalSessionsAttended: 4,
+  totalBattingMinutes: 48,
+  totalDeliveriesBowled: 72,
+  totalCentreWicketOvers: 2,
+  accumulatedFairnessCreditMinutes: 0
+}));
 

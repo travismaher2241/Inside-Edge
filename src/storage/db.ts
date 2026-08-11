@@ -1,5 +1,5 @@
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan } from '../types/cricket';
-import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_RULES_PROFILES } from '../modules/cricket/seedData';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from '../types/cricket';
+import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_RULES_PROFILES, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_SAVED_TEMPLATES, SEED_FAIRNESS_LEDGER } from '../modules/cricket/seedData';
 
 const STORAGE_KEYS = {
   TEAM: 'inside_edge_team_v1',
@@ -14,6 +14,11 @@ const STORAGE_KEYS = {
   OPPOSITION_BATTERS: 'inside_edge_opposition_batters_v1',
   RULES_PROFILES: 'inside_edge_rules_profiles_v1',
   SAVED_PLANS: 'inside_edge_saved_plans_v1',
+  CLUB_TEAMS: 'inside_edge_club_teams_v2',
+  TRAINING_RESOURCES: 'inside_edge_training_resources_v1',
+  CLUB_SESSIONS: 'inside_edge_club_sessions_v1',
+  FAIRNESS_LEDGER: 'inside_edge_fairness_ledger_v1',
+  SAVED_TEMPLATES: 'inside_edge_saved_templates_v1',
 };
 
 const memoryStore: Record<string, string> = {};
@@ -94,6 +99,54 @@ export const StorageEngine = {
     }
     if (!hasKey(STORAGE_KEYS.SAVED_PLANS)) {
       setItem(STORAGE_KEYS.SAVED_PLANS, []);
+    }
+    if (!hasKey(STORAGE_KEYS.CLUB_TEAMS)) {
+      const legacyTeam = getItem(STORAGE_KEYS.TEAM, SEED_TEAM);
+      setItem(STORAGE_KEYS.CLUB_TEAMS, [{
+        id: legacyTeam.id,
+        name: legacyTeam.name,
+        ageGroup: legacyTeam.ageGroup,
+        submissionToken: `migrated-${legacyTeam.id}`,
+        createdAt: new Date().toISOString(),
+        displayOrder: 1,
+        active: true,
+        squadPlayerIds: SEED_PLAYERS.map(player => player.id),
+        coachIds: [],
+        notes: `Migrated from legacy team (${legacyTeam.clubName}, ${legacyTeam.season}).`
+      } satisfies ClubTeam]);
+    }
+    if (!hasKey(STORAGE_KEYS.TRAINING_RESOURCES)) {
+      const legacyFacility = getItem(STORAGE_KEYS.FACILITY, SEED_FACILITY);
+      const migratedResources: TrainingResource[] = legacyFacility.netLanes.map(lane => ({
+        id: lane.id,
+        facilityId: legacyFacility.id,
+        name: lane.name,
+        type: lane.laneType === 'spin' ? 'spin_net' : lane.laneType === 'machine' ? 'bowling_machine_net' : lane.laneType === 'centre_strip' ? 'centre_wicket_half' : 'standard_net',
+        active: true,
+        maxBatters: lane.maxBatters,
+        minBowlers: 0,
+        maxBowlers: lane.maxBowlers,
+        maxTotalParticipants: lane.maxBatters + lane.maxBowlers + (lane.maxFeeders || 0),
+        requiresCoachOrLeader: Boolean(lane.assignedCoach),
+        supportsLiveBatting: true,
+        supportsCentreWicket: lane.laneType === 'centre_strip'
+      }));
+      if (legacyFacility.centreWicketAvailable && !migratedResources.some(resource => resource.supportsCentreWicket)) {
+        migratedResources.push({ id: `${legacyFacility.id}-centre`, facilityId: legacyFacility.id, name: 'Centre Wicket', type: 'centre_wicket', active: true, maxBatters: 2, minBowlers: 2, maxBowlers: 6, maxTotalParticipants: 16, requiresCoachOrLeader: true, supportsLiveBatting: true, supportsCentreWicket: true });
+      }
+      if (legacyFacility.outfieldAvailable) {
+        migratedResources.push({ id: `${legacyFacility.id}-outfield`, facilityId: legacyFacility.id, name: 'Outfield', type: 'fielding_area', active: true, maxBatters: 0, minBowlers: 0, maxBowlers: 0, maxTotalParticipants: 30, requiresCoachOrLeader: false, supportsLiveBatting: false, supportsCentreWicket: false });
+      }
+      setItem(STORAGE_KEYS.TRAINING_RESOURCES, migratedResources.length > 0 ? migratedResources : SEED_TRAINING_RESOURCES);
+    }
+    if (!hasKey(STORAGE_KEYS.CLUB_SESSIONS)) {
+      setItem(STORAGE_KEYS.CLUB_SESSIONS, []);
+    }
+    if (!hasKey(STORAGE_KEYS.SAVED_TEMPLATES)) {
+      setItem(STORAGE_KEYS.SAVED_TEMPLATES, SEED_SAVED_TEMPLATES);
+    }
+    if (!hasKey(STORAGE_KEYS.FAIRNESS_LEDGER)) {
+      setItem(STORAGE_KEYS.FAIRNESS_LEDGER, SEED_FAIRNESS_LEDGER);
     }
   },
 
@@ -263,6 +316,101 @@ export const StorageEngine = {
     const list = getItem<SavedTacticalPlan[]>(STORAGE_KEYS.SAVED_PLANS, []);
     const filtered = list.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.SAVED_PLANS, filtered);
+  },
+
+  // Dynamic Club Teams CRUD
+  getClubTeams: (): ClubTeam[] => getItem(STORAGE_KEYS.CLUB_TEAMS, SEED_CLUB_TEAMS),
+  saveClubTeams: (teams: ClubTeam[]) => setItem(STORAGE_KEYS.CLUB_TEAMS, teams),
+  saveClubTeam: (team: ClubTeam) => {
+    const list = StorageEngine.getClubTeams();
+    const idx = list.findIndex(t => t.id === team.id);
+    if (idx !== -1) {
+      list[idx] = team;
+    } else {
+      list.push(team);
+    }
+    StorageEngine.saveClubTeams(list);
+  },
+  deleteClubTeam: (id: string) => {
+    const list = StorageEngine.getClubTeams();
+    StorageEngine.saveClubTeams(list.filter(t => t.id !== id));
+  },
+
+  // Training Resources CRUD
+  getTrainingResources: (): TrainingResource[] => getItem(STORAGE_KEYS.TRAINING_RESOURCES, SEED_TRAINING_RESOURCES),
+  saveTrainingResources: (resources: TrainingResource[]) => setItem(STORAGE_KEYS.TRAINING_RESOURCES, resources),
+  saveTrainingResource: (resource: TrainingResource) => {
+    const list = StorageEngine.getTrainingResources();
+    const idx = list.findIndex(r => r.id === resource.id);
+    if (idx !== -1) {
+      list[idx] = resource;
+    } else {
+      list.push(resource);
+    }
+    StorageEngine.saveTrainingResources(list);
+  },
+  deleteTrainingResource: (id: string) => {
+    const list = StorageEngine.getTrainingResources();
+    StorageEngine.saveTrainingResources(list.filter(r => r.id !== id));
+  },
+
+  // Club Training Sessions CRUD
+  getClubSessions: (): ClubTrainingSession[] => getItem(STORAGE_KEYS.CLUB_SESSIONS, []),
+  saveClubSessions: (sessions: ClubTrainingSession[]) => setItem(STORAGE_KEYS.CLUB_SESSIONS, sessions),
+  saveClubSession: (session: ClubTrainingSession) => {
+    const list = StorageEngine.getClubSessions();
+    const idx = list.findIndex(s => s.id === session.id);
+    if (idx !== -1) {
+      list[idx] = session;
+    } else {
+      list.unshift(session);
+    }
+    StorageEngine.saveClubSessions(list);
+  },
+  getClubSession: (id: string): ClubTrainingSession | undefined => {
+    const list = StorageEngine.getClubSessions();
+    return list.find(s => s.id === id);
+  },
+  savePlayerAvailability: (sessionId: string, record: ClubTrainingSession['availabilityRecords'][string]) => {
+    const session = StorageEngine.getClubSession(sessionId);
+    if (!session) return;
+    StorageEngine.saveClubSession({ ...session, availabilityRecords: { ...session.availabilityRecords, [record.playerId]: record } });
+  },
+  saveStaffPlayerAssignment: (sessionId: string, assignment: ClubTrainingSession['staffPlayerAssignments'][string]) => {
+    const session = StorageEngine.getClubSession(sessionId);
+    if (!session) return;
+    StorageEngine.saveClubSession({ ...session, staffPlayerAssignments: { ...session.staffPlayerAssignments, [assignment.playerId]: assignment } });
+  },
+
+  // Rolling Fairness Ledger CRUD
+  getFairnessLedger: (): RollingFairnessLedger[] => getItem(STORAGE_KEYS.FAIRNESS_LEDGER, SEED_FAIRNESS_LEDGER),
+  saveFairnessLedger: (ledger: RollingFairnessLedger[]) => setItem(STORAGE_KEYS.FAIRNESS_LEDGER, ledger),
+  updatePlayerFairness: (playerId: string, update: Partial<RollingFairnessLedger>) => {
+    const list = StorageEngine.getFairnessLedger();
+    const idx = list.findIndex(l => l.playerId === playerId);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...update };
+    } else {
+      list.push({
+        playerId,
+        totalSessionsAttended: 1,
+        totalBattingMinutes: 0,
+        totalDeliveriesBowled: 0,
+        totalCentreWicketOvers: 0,
+        accumulatedFairnessCreditMinutes: 0,
+        ...update
+      });
+    }
+    StorageEngine.saveFairnessLedger(list);
+  },
+
+  // Saved Club Templates CRUD
+  getSavedTemplates: (): SavedClubTemplate[] => getItem(STORAGE_KEYS.SAVED_TEMPLATES, SEED_SAVED_TEMPLATES),
+  saveSavedTemplates: (templates: SavedClubTemplate[]) => setItem(STORAGE_KEYS.SAVED_TEMPLATES, templates),
+  addSavedTemplate: (template: SavedClubTemplate) => {
+    const list = StorageEngine.getSavedTemplates();
+    list.push(template);
+    StorageEngine.saveSavedTemplates(list);
   },
 };
 

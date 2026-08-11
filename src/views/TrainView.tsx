@@ -1,10 +1,11 @@
 import React, { useState, useMemo, lazy, Suspense } from 'react';
-import type { TrainingSession, Facility, Player, NetLane } from '../types/cricket';
+import type { TrainingSession, Facility, Player, NetLane, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from '../types/cricket';
 import { NetVisualizer } from '../components/cricket/NetVisualizer';
 import { adjustNetCount, calculateUtilisation, derivePlanRationale } from '../modules/cricket/rotationEngine';
 import { Play, Clock, Layers, AlertTriangle, Lightbulb, Plus, X, Check } from 'lucide-react';
 
 const SessionCreationModal = lazy(() => import('../components/cricket/SessionCreationModal').then(m => ({ default: m.SessionCreationModal })));
+const ClubTrainingPlanner = lazy(() => import('../components/cricket/planner/ClubTrainingPlanner').then(m => ({ default: m.ClubTrainingPlanner })));
 
 
 interface TrainViewProps {
@@ -14,6 +15,13 @@ interface TrainViewProps {
   onUpdateSession: (session: TrainingSession) => void;
   onStartLiveSession: () => void;
   onOpenQuickObservation: (player: Player) => void;
+  clubTeams: ClubTeam[];
+  trainingResources: TrainingResource[];
+  clubSession?: ClubTrainingSession;
+  fairnessLedger: RollingFairnessLedger[];
+  savedClubTemplates: SavedClubTemplate[];
+  onSaveClubSession: (session: ClubTrainingSession) => void;
+  onSaveClubTemplate: (template: SavedClubTemplate) => void;
 }
 
 export const TrainView: React.FC<TrainViewProps> = ({
@@ -22,8 +30,16 @@ export const TrainView: React.FC<TrainViewProps> = ({
   players,
   onUpdateSession,
   onStartLiveSession,
-  onOpenQuickObservation
+  onOpenQuickObservation,
+  clubTeams,
+  trainingResources,
+  clubSession,
+  fairnessLedger,
+  savedClubTemplates,
+  onSaveClubSession,
+  onSaveClubTemplate
 }) => {
+  const [plannerMode, setPlannerMode] = useState<'club' | 'quick'>('club');
   const [activeTab, setActiveTab] = useState<'blocks' | 'nets'>('nets');
   const [isConfirmNewSessionOpen, setIsConfirmNewSessionOpen] = useState<boolean>(false);
   const [isCreationModalOpen, setIsCreationModalOpen] = useState<boolean>(false);
@@ -100,8 +116,36 @@ export const TrainView: React.FC<TrainViewProps> = ({
     return derivePlanRationale(netLanes, session.rationale);
   }, [netLanes, session.rationale]);
 
+  if (plannerMode === 'club') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '10px', padding: '4px' }}>
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setPlannerMode('club')}>CLUB PLANNER</button>
+          <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setPlannerMode('quick')}>QUICK TEAM VIEW</button>
+        </div>
+        <Suspense fallback={<div className="card" style={{ padding: '24px', textAlign: 'center' }}>Loading Club Training Planner...</div>}>
+          <ClubTrainingPlanner
+            teams={clubTeams}
+            resources={trainingResources}
+            players={players}
+            savedTemplates={savedClubTemplates}
+            rollingLedger={fairnessLedger}
+            currentSession={clubSession}
+            onSaveSession={onSaveClubSession}
+            onSaveTemplate={onSaveClubTemplate}
+            onOpenQuickObservation={onOpenQuickObservation}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '10px', padding: '4px' }}>
+        <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setPlannerMode('club')}>CLUB PLANNER</button>
+        <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setPlannerMode('quick')}>QUICK TEAM VIEW</button>
+      </div>
       {/* Header & Actions */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
