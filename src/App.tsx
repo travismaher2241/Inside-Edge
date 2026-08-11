@@ -4,7 +4,8 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from './lib/firebase';
 import {
   subscribeToCoachProfile,
-  logoutCoach
+  logoutCoach,
+  type CoachProfileLoadError
 } from './modules/cricket/authService';
 import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
 import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from './types/cricket';
@@ -38,6 +39,7 @@ export function App() {
   // Auth & Coach State
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [coachProfile, setCoachProfile] = useState<CoachUser | null>(null);
+  const [coachProfileError, setCoachProfileError] = useState<CoachProfileLoadError | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isCoachManagerOpen, setIsCoachManagerOpen] = useState<boolean>(false);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
@@ -73,6 +75,7 @@ export function App() {
       setAuthUser(user);
       if (!user) {
         setCoachProfile(null);
+        setCoachProfileError(null);
         setIsAuthLoading(false);
       }
     });
@@ -84,8 +87,9 @@ export function App() {
     if (!authUser) return;
     setIsAuthLoading(true);
 
-    const unsubProfile = subscribeToCoachProfile(authUser.uid, profile => {
+    const unsubProfile = subscribeToCoachProfile(authUser.uid, (profile, error) => {
       setCoachProfile(profile);
+      setCoachProfileError(error ?? null);
       setIsAuthLoading(false);
     });
 
@@ -295,6 +299,26 @@ export function App() {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
         Authenticating coach session...
+      </div>
+    );
+  }
+
+  // A signed-in Firebase user without a loaded coach profile is not the same
+  // as being logged out — silently falling through to LoginView here made a
+  // propagation delay or a Firestore permission error look like a wrong
+  // password, so surface what actually happened instead.
+  if (!isTestMode && authUser && !coachProfile) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+        <div className="card" style={{ maxWidth: '420px', textAlign: 'center' }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '8px' }}>We couldn't load your coach profile</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px' }}>
+            {coachProfileError === 'not_found'
+              ? "Your coach profile hasn't been set up yet. If you just accepted an invite, wait a moment and refresh. Otherwise, ask your club Head Coach to check your account."
+              : 'There was a problem reaching your coach profile. Check your connection and try again.'}
+          </p>
+          <button className="btn btn-secondary" onClick={() => void logoutCoach()}>Sign out</button>
+        </div>
       </div>
     );
   }
