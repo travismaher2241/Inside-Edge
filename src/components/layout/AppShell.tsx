@@ -1,0 +1,104 @@
+// App Shell Layout Component with Navigation
+
+import React from 'react';
+import { Home, Dumbbell, Users, Trophy, BookOpen, Shield } from 'lucide-react';
+import type { Team } from '../../types/cricket';
+
+export type TabType = 'home' | 'train' | 'team' | 'match' | 'library';
+
+interface AppShellProps {
+  activeTab: TabType;
+  onSelectTab: (tab: TabType) => void;
+  team: Team;
+  onOpenFieldBoard: () => void;
+  children: React.ReactNode;
+}
+
+export const AppShell: React.FC<AppShellProps> = ({
+  activeTab,
+  onSelectTab,
+  team,
+  onOpenFieldBoard,
+  children
+}) => {
+  return (
+    <div className="app-container">
+      {/* Sticky Header */}
+      <header className="app-header">
+        <div className="brand-badge">
+          INSIDE <span>EDGE</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={onOpenFieldBoard}
+            style={{
+              background: 'rgba(229, 169, 60, 0.15)',
+              border: '1px solid var(--border-gold)',
+              color: 'var(--accent-gold)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            <Shield size={14} /> FIELD BOARD
+          </button>
+          <div className="team-pill">{team.ageGroup}</div>
+        </div>
+      </header>
+
+      {/* Main View Body */}
+      <main className="app-main">
+        {children}
+      </main>
+
+      {/* Mobile Persistent Navigation */}
+      <nav className="bottom-nav">
+        <button
+          className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}
+          onClick={() => onSelectTab('home')}
+        >
+          <Home />
+          <span>Home</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'train' ? 'active' : ''}`}
+          onClick={() => onSelectTab('train')}
+        >
+          <Dumbbell />
+          <span>Train</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'team' ? 'active' : ''}`}
+          onClick={() => onSelectTab('team')}
+        >
+          <Users />
+          <span>Team</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'match' ? 'active' : ''}`}
+          onClick={() => onSelectTab('match')}
+        >
+          <Trophy />
+          <span>Match</span>
+        </button>
+
+        <button
+          className={`nav-item ${activeTab === 'library' ? 'active' : ''}`}
+          onClick={() => onSelectTab('library')}
+        >
+          <BookOpen />
+          <span>Library</span>
+        </button>
+      </nav>
+    </div>
+  );
+};
