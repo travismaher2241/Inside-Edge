@@ -1,10 +1,10 @@
 // Refactored Interactive Cricket Field Setting Board Component (10 Markers: Keeper + 9 Fielders)
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { BattingHand } from '../../types/cricket';
-import type { FieldSpot, FieldSide } from '../../modules/cricket/tactics/types';
+import type { BattingHand, SavedFieldSetting } from '../../types/cricket';
+import type { FieldSpot, FieldSide, TacticalPhase } from '../../modules/cricket/tactics/types';
 import { TACTICAL_FIELD_PRESETS, fieldForBatterHand } from '../../modules/cricket/tactics/fieldPresets';
-import { X, Shield, RotateCcw, AlertTriangle, Check, Info } from 'lucide-react';
+import { X, Shield, RotateCcw, AlertTriangle, Check, Info, Settings, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface FieldBoardModalProps {
   onClose: () => void;
@@ -18,6 +18,10 @@ interface FieldBoardModalProps {
   maxTotalLegSide?: number;
   shortBoundarySide?: FieldSide;
   onSaveField?: (positions: FieldSpot[]) => void;
+  savedSettings?: SavedFieldSetting[];
+  matchId?: string;
+  onSaveSetting?: (setting: SavedFieldSetting) => void;
+  onDeleteSetting?: (settingId: string) => void;
 }
 
 export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
@@ -32,11 +36,21 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
   maxTotalLegSide = 5,
   shortBoundarySide,
   onSaveField,
+  savedSettings = [],
+  matchId,
+  onSaveSetting,
+  onDeleteSetting,
 }) => {
   const [batterHand, setBatterHand] = useState<BattingHand>(initialBatterHand);
   const [selectedPresetId, setSelectedPresetId] = useState<string>(initialPresetId);
   const [selectedFielderId, setSelectedFielderId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [selectedSettingId, setSelectedSettingId] = useState<string>('');
+  const [settingName, setSettingName] = useState<string>('');
+  const [bowlerStyle, setBowlerStyle] = useState<'pace' | 'spin'>('pace');
+  const [tacticalPhase, setTacticalPhase] = useState<TacticalPhase>('new_ball');
+  const [saveMessage, setSaveMessage] = useState<string>('');
+  const [isSettingsManagerOpen, setIsSettingsManagerOpen] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -158,22 +172,62 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
   const handleSave = () => {
     if (!isLegal) return;
-    if (onSaveField) {
-      onSaveField(positions);
-    }
+    if (onSaveField) onSaveField(positions);
     onClose();
+  };
+
+  const loadSavedSetting = (settingId: string) => {
+    setSelectedSettingId(settingId);
+    const setting = savedSettings.find(item => item.id === settingId);
+    if (!setting) return;
+    setSettingName(setting.name);
+    setBatterHand(setting.batterHand);
+    setBowlerStyle(setting.bowlerStyle);
+    setTacticalPhase(setting.tacticalPhase);
+    setPositions(setting.positions);
+  };
+
+  const persistSetting = (mode: 'save_as' | 'update' | 'duplicate' | 'attach') => {
+    if (!onSaveSetting || !isLegal || !settingName.trim()) return;
+    const existing = savedSettings.find(item => item.id === selectedSettingId);
+    const now = new Date().toISOString();
+    const createNew = mode === 'save_as' || mode === 'duplicate' || !existing;
+    const setting: SavedFieldSetting = {
+      id: createNew ? `field-${Date.now()}` : existing.id,
+      name: mode === 'duplicate' ? `${settingName.trim()} copy` : settingName.trim(),
+      batterHand,
+      bowlerStyle,
+      tacticalPhase,
+      competitionRulesProfileId: existing?.competitionRulesProfileId,
+      positions,
+      matchId: mode === 'attach' ? matchId : existing?.matchId,
+      createdAt: createNew ? now : existing.createdAt,
+      updatedAt: now
+    };
+    onSaveSetting(setting);
+    setSelectedSettingId(setting.id);
+    setSettingName(setting.name);
+    setSaveMessage(mode === 'attach' ? 'Attached to the current match plan.' : 'Field setting saved.');
+  };
+
+  const deleteSetting = () => {
+    if (!selectedSettingId || !onDeleteSetting) return;
+    onDeleteSetting(selectedSettingId);
+    setSelectedSettingId('');
+    setSettingName('');
+    setSaveMessage('Field setting deleted.');
   };
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
-      <div className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="field-board-title" className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
               TACTICAL FIELD BOARD {bowlerName ? `• ${bowlerName}` : ''}
             </div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{planTitle || 'Tactical Field Setting'}</div>
+            <div id="field-board-title" style={{ fontSize: '1.2rem', fontWeight: 800 }}>{planTitle || 'Tactical Field Setting'}</div>
           </div>
           <button
             type="button"
@@ -269,6 +323,43 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             </select>
           </div>
         </div>
+
+        {onSaveSetting && (
+          <div style={{ marginBottom: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setIsSettingsManagerOpen(open => !open)}
+              aria-expanded={isSettingsManagerOpen}
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'space-between', fontSize: '0.8rem' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Settings size={14} />
+                Manage saved settings {settingName ? `— ${settingName}` : ''}
+              </span>
+              {isSettingsManagerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {isSettingsManagerOpen && (
+              <div className="card" style={{ display: 'grid', gap: '8px', marginTop: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+                  <label>Saved setting<select value={selectedSettingId} onChange={event => loadSavedSetting(event.target.value)}><option value="">New setting</option>{savedSettings.map(setting => <option key={setting.id} value={setting.id}>{setting.name}</option>)}</select></label>
+                  <label>Setting name<input value={settingName} onChange={event => setSettingName(event.target.value)} placeholder="e.g. New-ball pressure" /></label>
+                  <label>Bowler style<select value={bowlerStyle} onChange={event => setBowlerStyle(event.target.value as 'pace' | 'spin')}><option value="pace">Pace</option><option value="spin">Spin</option></select></label>
+                  <label>Tactical phase<select value={tacticalPhase} onChange={event => setTacticalPhase(event.target.value as TacticalPhase)}><option value="new_ball">New ball</option><option value="powerplay">Powerplay</option><option value="middle_overs">Middle overs</option><option value="death">Death</option><option value="old_ball">Old ball</option></select></label>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary" onClick={() => persistSetting('save_as')} disabled={!settingName.trim() || !isLegal}>Save as</button>
+                  <button className="btn btn-secondary" onClick={() => persistSetting('update')} disabled={!selectedSettingId || !isLegal}>Update</button>
+                  <button className="btn btn-secondary" onClick={() => persistSetting('duplicate')} disabled={!selectedSettingId || !isLegal}>Duplicate</button>
+                  <button className="btn btn-secondary" onClick={deleteSetting} disabled={!selectedSettingId}>Delete</button>
+                  {matchId && <button className="btn btn-gold" onClick={() => persistSetting('attach')} disabled={!settingName.trim() || !isLegal}>Attach to match</button>}
+                </div>
+                {saveMessage && <div role="status" style={{ color: 'var(--primary-green-light)', fontSize: '0.78rem' }}>{saveMessage}</div>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Cricket Oval Pitch Canvas */}
         <div
@@ -445,14 +536,8 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             <RotateCcw size={14} /> RESET PRESET
           </button>
 
-          <button
-            className="btn btn-gold"
-            onClick={handleSave}
-            disabled={!isLegal}
-            style={{ flex: 2, opacity: isLegal ? 1 : 0.5 }}
-          >
-            <Shield size={16} /> SAVE FIELD SETTING
-          </button>
+          {onSaveField ? <button className="btn btn-gold" onClick={handleSave} disabled={!isLegal} style={{ flex: 2, opacity: isLegal ? 1 : 0.5 }}><Shield size={16} /> SAVE FIELD SETTING</button>
+            : <button className="btn btn-gold" onClick={onClose} style={{ flex: 2 }}>CLOSE</button>}
         </div>
       </div>
     </div>
