@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DEVELOPMENT_DOMAINS } from '../modules/cricket/taxonomy';
 import { getTeamByToken, submitMatchReport } from '../modules/cricket/matchReportService';
+import { getLocalDateString } from '../modules/cricket/matchHelpers';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { FirebaseNotConfiguredBanner } from '../components/cricket/FirebaseNotConfiguredBanner';
 import type { ClubTeam } from '../types/cricket';
@@ -18,7 +19,7 @@ export const PublicCaptainReportView: React.FC<PublicCaptainReportViewProps> = (
   // Form State
   const [captainName, setCaptainName] = useState<string>('');
   const [opponent, setOpponent] = useState<string>('');
-  const [matchDate, setMatchDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [matchDate, setMatchDate] = useState<string>(getLocalDateString());
   const [freeTextNotes, setFreeTextNotes] = useState<string>('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('Batting');

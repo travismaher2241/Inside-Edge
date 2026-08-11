@@ -3,6 +3,20 @@
 import type { MatchRecord, MatchObservation } from '../../types/cricket';
 
 /**
+ * Today's date as YYYY-MM-DD in the local timezone. Unlike
+ * `new Date().toISOString().split('T')[0]` (which reads the UTC calendar
+ * date), this matches what the user actually sees on their clock — needed
+ * so date pickers don't default to the wrong day for AU-based users near
+ * local midnight (UTC+10/+11 puts them a day ahead of UTC for hours daily).
+ */
+export function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Returns the most relevant active match from a list of MatchRecords.
  * Prioritizes the nearest upcoming fixture (date >= today).
  * If no upcoming fixture exists, falls back to the most recent match by date.

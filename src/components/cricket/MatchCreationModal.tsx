@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import type { MatchRecord } from '../../types/cricket';
+import { getLocalDateString } from '../../modules/cricket/matchHelpers';
 import { Calendar, MapPin, X, Plus, Trash2, Check, AlertTriangle } from 'lucide-react';
 
 interface MatchCreationModalProps {
@@ -21,7 +22,7 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
   onSaveMatch
 }) => {
   const [opponent, setOpponent] = useState<string>('');
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(getLocalDateString());
   const [venue, setVenue] = useState<string>('Home Oval');
   const [format, setFormat] = useState<MatchRecord['format']>('T20');
   const [result, setResult] = useState<string>('');

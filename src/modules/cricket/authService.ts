@@ -75,10 +75,18 @@ export async function getCoachProfile(uid: string): Promise<CoachUser | null> {
   }
 }
 
+export type CoachProfileLoadError = 'not_found' | 'subscription_error';
+
 /**
- * Subscribe to real-time changes on a coach's document profile
+ * Subscribe to real-time changes on a coach's document profile.
+ * The callback's second argument distinguishes "no profile doc yet" from an
+ * actual subscription error, since both would otherwise look identical
+ * (profile === null) to callers deciding what to show the user.
  */
-export function subscribeToCoachProfile(uid: string, callback: (profile: CoachUser | null) => void): () => void {
+export function subscribeToCoachProfile(
+  uid: string,
+  callback: (profile: CoachUser | null, error?: CoachProfileLoadError) => void
+): () => void {
   const docRef = doc(db, 'coaches', uid);
   return onSnapshot(
     docRef,
@@ -86,12 +94,12 @@ export function subscribeToCoachProfile(uid: string, callback: (profile: CoachUs
       if (snap.exists()) {
         callback(snap.data() as CoachUser);
       } else {
-        callback(null);
+        callback(null, 'not_found');
       }
     },
     err => {
       console.error('Coach profile subscription error:', err);
-      callback(null);
+      callback(null, 'subscription_error');
     }
   );
 }
