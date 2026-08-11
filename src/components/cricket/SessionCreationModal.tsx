@@ -29,7 +29,7 @@ export const SessionCreationModal: React.FC<SessionCreationModalProps> = ({
   onClose,
   onSaveSession
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form State
   const [title, setTitle] = useState<string>('Thursday Training Session');
@@ -280,7 +280,24 @@ export const SessionCreationModal: React.FC<SessionCreationModalProps> = ({
               cursor: 'pointer'
             }}
           >
-            3. NETS & OBJECTIVES
+            3. NETS
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep(4)}
+            style={{
+              flex: 1,
+              padding: '8px 4px',
+              borderRadius: '8px',
+              border: 'none',
+              background: step === 4 ? 'var(--primary-green)' : 'transparent',
+              color: step === 4 ? '#fff' : 'var(--text-secondary)',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer'
+            }}
+          >
+            4. OBJECTIVES ({objectives.length}/3)
           </button>
         </div>
 
@@ -505,13 +522,13 @@ export const SessionCreationModal: React.FC<SessionCreationModalProps> = ({
                   }}
                   style={{ flex: 1 }}
                 >
-                  {'NEXT: NETS & OBJECTIVES \u2192'}
+                  {'NEXT: NET LANES \u2192'}
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: Net Lanes & Objectives + Live Utilisation Preview */}
+          {/* STEP 3: Net Lanes + Live Utilisation Preview */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Net Count Selector */}
@@ -543,6 +560,59 @@ export const SessionCreationModal: React.FC<SessionCreationModalProps> = ({
                 </div>
               </div>
 
+              {/* Real-time Rotation & Utilisation Engine Preview (Satisfying AC-01 & FR-009) */}
+              {utilisationMetrics && (
+                <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-active)', borderRadius: '10px', padding: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-gold)' }}>
+                      <Sparkles size={14} /> ENGINE UTILISATION PREVIEW
+                    </span>
+                    <span style={{ color: utilisationMetrics.unassignedPlayersCount > 0 ? '#f97316' : '#4ade80' }}>
+                      {utilisationMetrics.allocatedPlayersCount} / {utilisationMetrics.totalExpectedPlayers} Allocated
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '12px' }}>
+                    <span>\ud83d\udccd {selectedLanes.length} Active Nets</span>
+                    <span>\ud83d\udc65 {availableCount} Expected Players</span>
+                  </div>
+
+                  {utilisationMetrics.warnings.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {utilisationMetrics.warnings.map((w, idx) => (
+                        <div key={idx} style={{ fontSize: '0.75rem', color: '#f97316', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <AlertTriangle size={12} /> {w}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setStep(2)}
+                  style={{ flex: 1 }}
+                >
+                  {'\u2190 BACK'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setStep(4)}
+                  style={{ flex: 1 }}
+                >
+                  {'NEXT: OBJECTIVES \u2192'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: Primary Objectives */}
+          {step === 4 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Primary Objectives Selection */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -652,41 +722,12 @@ export const SessionCreationModal: React.FC<SessionCreationModalProps> = ({
                 )}
               </div>
 
-              {/* Real-time Rotation & Utilisation Engine Preview (Satisfying AC-01 & FR-009) */}
-              {utilisationMetrics && (
-                <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-active)', borderRadius: '10px', padding: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-gold)' }}>
-                      <Sparkles size={14} /> ENGINE UTILISATION PREVIEW
-                    </span>
-                    <span style={{ color: utilisationMetrics.unassignedPlayersCount > 0 ? '#f97316' : '#4ade80' }}>
-                      {utilisationMetrics.allocatedPlayersCount} / {utilisationMetrics.totalExpectedPlayers} Allocated
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', gap: '12px' }}>
-                    <span>📍 {selectedLanes.length} Active Nets</span>
-                    <span>👥 {availableCount} Expected Players</span>
-                  </div>
-
-                  {utilisationMetrics.warnings.length > 0 && (
-                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {utilisationMetrics.warnings.map((w, idx) => (
-                        <div key={idx} style={{ fontSize: '0.75rem', color: '#f97316', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <AlertTriangle size={12} /> {w}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Modal Actions */}
               <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   style={{ flex: 1 }}
                 >
                   {'\u2190 BACK'}
