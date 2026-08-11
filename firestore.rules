@@ -22,13 +22,17 @@ service cloud.firestore {
     }
 
     function isValidTeamToken(teamId, token) {
-      return exists(/databases/$(database)/documents/teams/$(teamId))
-        && get(/databases/$(database)/documents/teams/$(teamId)).data.submissionToken == token;
+      return exists(/databases/$(database)/documents/clubTeams/$(teamId))
+        && get(/databases/$(database)/documents/clubTeams/$(teamId)).data.submissionToken == token;
     }
 
     // 1. Captain Public Collections (No login required)
-    match /teams/{teamId} {
-      allow read, write: if true;
+    // clubTeams must be publicly readable so an unauthenticated captain can look
+    // up their team by submissionToken (used by both /report/:token and the
+    // matchReports create check below); writes remain coach-only.
+    match /clubTeams/{teamId} {
+      allow read: if true;
+      allow write: if isAssistantOrHeadCoach();
     }
 
     match /matchReports/{reportId} {
@@ -70,7 +74,6 @@ service cloud.firestore {
     match /activities/{activityId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /sessions/{sessionId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /matches/{matchId} { allow read, write: if isAssistantOrHeadCoach(); }
-    match /clubTeams/{teamId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /trainingResources/{resourceId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /clubTrainingSessions/{sessionId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /fairnessLedger/{playerId} { allow read, write: if isAssistantOrHeadCoach(); }
