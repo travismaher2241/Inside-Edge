@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import type { ClubTeam } from '../../types/cricket';
+import type { ClubTeam, MatchReport } from '../../types/cricket';
 import { getClubTeams, createClubTeam } from '../../modules/cricket/matchReportService';
+import { getLatestReport } from '../../modules/cricket/roundupAggregation';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { FirebaseNotConfiguredBanner } from './FirebaseNotConfiguredBanner';
-import { Copy, Check, QrCode, Plus, ShieldAlert, Users, ExternalLink } from 'lucide-react';
+import { Copy, Check, QrCode, Plus, ShieldAlert, Users, ExternalLink, Share2, Link2 } from 'lucide-react';
 
-export const ClubTeamManager: React.FC = () => {
+interface ClubTeamManagerProps {
+  reports?: MatchReport[];
+}
+
+export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }) => {
   const [teams, setTeams] = useState<ClubTeam[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
@@ -13,6 +18,7 @@ export const ClubTeamManager: React.FC = () => {
   const [ageGroup, setAgeGroup] = useState<string>('Seniors');
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [qrModalTeam, setQrModalTeam] = useState<ClubTeam | null>(null);
+  const [feedback, setFeedback] = useState<string>('');
 
   useEffect(() => {
     loadTeams();
@@ -36,7 +42,7 @@ export const ClubTeamManager: React.FC = () => {
 
     try {
       const created = await createClubTeam(teamName.trim(), ageGroup.trim());
-      setTeams([...teams, created]);
+      setTeams(current => [...current, created]);
       setTeamName('');
       setShowAddForm(false);
     } catch (err) {
@@ -49,11 +55,30 @@ export const ClubTeamManager: React.FC = () => {
     return `${origin}/report/${token}`;
   };
 
-  const handleCopyLink = (token: string) => {
+  const handleCopyLink = async (token: string) => {
     const url = getSubmissionUrl(token);
-    navigator.clipboard.writeText(url);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2500);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedToken(token);
+      setFeedback('Captain link copied.');
+      setTimeout(() => setCopiedToken(null), 2500);
+    } catch {
+      setFeedback('Could not copy the link. Open the form and copy its address instead.');
+    }
+  };
+
+  const handleShareLink = async (team: ClubTeam) => {
+    const url = getSubmissionUrl(team.submissionToken);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${team.name} captain report`, text: `Submit the ${team.name} post-match report`, url });
+        setFeedback(`Captain link shared for ${team.name}.`);
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    }
+    await handleCopyLink(team.submissionToken);
   };
 
   return (
@@ -81,22 +106,19 @@ export const ClubTeamManager: React.FC = () => {
         </button>
       </div>
 
-      {/* Security Model Disclaimer */}
-      <div style={{
+      {feedback && <div role="status" style={{ marginBottom: '12px', color: feedback.startsWith('Could not') ? '#f97316' : '#4ade80', fontSize: '0.85rem' }}>{feedback}</div>}
+
+      <details style={{
         backgroundColor: 'rgba(229, 169, 60, 0.1)',
         border: '1px solid var(--border-gold)',
         borderRadius: 'var(--radius-md)',
         padding: '10px 14px',
         marginBottom: '16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
+        color: 'var(--text-gold)'
       }}>
-        <ShieldAlert style={{ width: '20px', height: '20px', color: 'var(--accent-gold)', flexShrink: 0 }} />
-        <span style={{ fontSize: '0.78rem', color: 'var(--text-gold)', lineHeight: 1.4 }}>
-          <strong>Access Security Model:</strong> Submission tokens act as link-based access control. <em>Anyone with this link can submit post-match notes for this team.</em> No captain login is required.
-        </span>
-      </div>
+        <summary style={{ cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700 }}><ShieldAlert style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '6px' }} />How captain-link access works</summary>
+        <p style={{ fontSize: '0.78rem', lineHeight: 1.4, marginTop: '8px' }}>Anyone with a team’s link can submit post-match notes for that team. No captain login is required, so share links only with the intended captain or coach.</p>
+      </details>
 
       {/* Create Team Form */}
       {showAddForm && (
@@ -188,6 +210,7 @@ export const ClubTeamManager: React.FC = () => {
           {teams.map(t => {
             const isCopied = copiedToken === t.submissionToken;
             const linkUrl = getSubmissionUrl(t.submissionToken);
+            const latestReport = getLatestReport(reports.filter(report => report.teamId === t.id));
 
             return (
               <div
@@ -200,7 +223,8 @@ export const ClubTeamManager: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '12px'
+                  gap: '12px',
+                  flexWrap: 'wrap'
                 }}
               >
                 <div>
@@ -211,9 +235,12 @@ export const ClubTeamManager: React.FC = () => {
                   <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px', wordBreak: 'break-all' }}>
                     {linkUrl}
                   </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '5px', fontSize: '0.72rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}><Link2 size={12} style={{ verticalAlign: 'middle' }} /> {latestReport ? `Last report ${new Date(latestReport.createdAt).toLocaleString()}` : 'No report received'}</span>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     onClick={() => handleCopyLink(t.submissionToken)}
@@ -233,9 +260,19 @@ export const ClubTeamManager: React.FC = () => {
 
                   <button
                     type="button"
+                    onClick={() => void handleShareLink(t)}
+                    className="btn btn-secondary"
+                    aria-label={`Share captain link for ${t.name}`}
+                    style={{ width: 'auto', minHeight: '34px', padding: '0 10px', fontSize: '0.78rem' }}
+                  >
+                    <Share2 style={{ width: '14px', height: '14px' }} /> Share
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setQrModalTeam(t)}
                     className="btn btn-secondary"
-                    title="Show QR Code"
+                    aria-label={`Show QR code for ${t.name}`}
                     style={{ width: 'auto', minHeight: '34px', padding: '0 10px', fontSize: '0.78rem' }}
                   >
                     <QrCode style={{ width: '14px', height: '14px' }} />
@@ -246,7 +283,7 @@ export const ClubTeamManager: React.FC = () => {
                     target="_blank"
                     rel="noreferrer"
                     className="btn btn-secondary"
-                    title="Open Form Preview"
+                    aria-label={`Open captain form for ${t.name}`}
                     style={{ width: 'auto', minHeight: '34px', padding: '0 10px', fontSize: '0.78rem', textDecoration: 'none' }}
                   >
                     <ExternalLink style={{ width: '14px', height: '14px' }} />
@@ -261,8 +298,8 @@ export const ClubTeamManager: React.FC = () => {
       {/* QR Code Modal */}
       {qrModalTeam && (
         <div className="bottom-sheet-overlay" onClick={() => setQrModalTeam(null)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '4px' }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="captain-qr-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+            <h3 id="captain-qr-title" style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '4px' }}>
               {qrModalTeam.name} - Captain QR Code
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
