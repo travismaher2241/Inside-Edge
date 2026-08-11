@@ -1,6 +1,6 @@
 // Seed Data for Inside Edge Cricket Coaching App
 
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation } from '../../types/cricket';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, CompetitionRulesProfile } from '../../types/cricket';
 
 export const SEED_TEAM: Team = {
   id: 'team-1',
@@ -72,7 +72,12 @@ export const SEED_PLAYERS: Player[] = [
     wicketkeepingCapability: 'none',
     trainingAvailability: true,
     workloadRestriction: { maxDeliveries: 36, restrictedBowler: true, notes: 'Managing shoulder strain - max 36 deliveries' },
-    activeDevelopmentFocusIds: ['focus-2']
+    activeDevelopmentFocusIds: ['focus-2'],
+    capabilities: ['outswing', 'accurate_fourth_stump', 'wobble_seam'],
+    controlRating: 4,
+    availableVariations: ['Outswing', 'Off-Cutter', 'Bouncer'],
+    preferredPhases: ['new_ball', 'powerplay'],
+    tacticalNotes: 'Reliable fourth stump accuracy with new ball'
   },
   {
     id: 'p-3',
@@ -84,7 +89,12 @@ export const SEED_PLAYERS: Player[] = [
     bowlingStyle: 'right_arm_off_spin',
     wicketkeepingCapability: 'backup',
     trainingAvailability: true,
-    activeDevelopmentFocusIds: []
+    activeDevelopmentFocusIds: [],
+    capabilities: ['stock_spin_control', 'turns_into_batter', 'turns_away_from_batter', 'flight_and_dip'],
+    controlRating: 4,
+    availableVariations: ['Off-break', 'Arm Ball', 'Top Spinner'],
+    preferredPhases: ['middle_overs'],
+    tacticalNotes: 'Controls middle overs well against right-handers'
   },
   {
     id: 'p-4',
@@ -108,7 +118,11 @@ export const SEED_PLAYERS: Player[] = [
     bowlingStyle: 'left_arm_orthodox',
     wicketkeepingCapability: 'none',
     trainingAvailability: true,
-    activeDevelopmentFocusIds: []
+    activeDevelopmentFocusIds: [],
+    capabilities: ['turns_away_from_batter', 'flight_and_dip', 'arm_ball_or_slider', 'change_of_pace'],
+    controlRating: 3,
+    availableVariations: ['Stock Spin', 'Arm Ball'],
+    preferredPhases: ['middle_overs', 'run_defence']
   },
   {
     id: 'p-6',
@@ -120,7 +134,11 @@ export const SEED_PLAYERS: Player[] = [
     bowlingStyle: 'right_arm_fast',
     wicketkeepingCapability: 'none',
     trainingAvailability: true,
-    activeDevelopmentFocusIds: []
+    activeDevelopmentFocusIds: [],
+    capabilities: ['high_pace', 'steep_bounce', 'bouncer_control', 'straight_yorker'],
+    controlRating: 4,
+    availableVariations: ['Bouncer', 'Yorker', 'Slower Ball'],
+    preferredPhases: ['new_ball', 'death']
   },
   {
     id: 'p-7',
@@ -592,3 +610,76 @@ export const SEED_SESSION: TrainingSession = {
     }
   ]
 };
+
+export const SEED_RULES_PROFILES: CompetitionRulesProfile[] = [
+  {
+    id: 'rules-t20-default',
+    name: 'T20 Playing Conditions (Default)',
+    format: 't20',
+    inningsOvers: 20,
+    phases: [
+      { phase: 'powerplay', oversRange: [1, 6], maxOutsideCircle: 2 },
+      { phase: 'middle_overs', oversRange: [7, 15], maxOutsideCircle: 5 },
+      { phase: 'death', oversRange: [16, 20], maxOutsideCircle: 5 },
+    ],
+    maxBehindSquareLeg: 2,
+    shortBallRulesNotes: 'Max 1 short-pitched delivery above shoulder height per over (Law 41.6 / ICC T20I). Confirm local competition rules.',
+    wideInterpretationNotes: 'Strict wide interpretation on leg side; off-side wide guideline applies outside target line.',
+    juniorSafetySettings: { allowShortBall: false, maxControlRequiredForShortBall: 3 },
+    effectiveDate: '2026-08-01',
+    sourceNote: 'Default T20 preset. Must be checked against local competition playing conditions.',
+  },
+  {
+    id: 'rules-40over-default',
+    name: '40-Over Playing Conditions (Default)',
+    format: 'one_day_40',
+    inningsOvers: 40,
+    phases: [
+      { phase: 'powerplay', oversRange: [1, 8], maxOutsideCircle: 2 },
+      { phase: 'middle_overs', oversRange: [9, 32], maxOutsideCircle: 4 },
+      { phase: 'death', oversRange: [33, 40], maxOutsideCircle: 5 },
+    ],
+    maxBehindSquareLeg: 2,
+    shortBallRulesNotes: 'Max 1 bouncer per over. Confirm local grade/junior limits.',
+    wideInterpretationNotes: 'Standard one-day wide guidelines apply.',
+    juniorSafetySettings: { allowShortBall: false, maxControlRequiredForShortBall: 4 },
+    effectiveDate: '2026-08-01',
+    sourceNote: 'Default 40-Over preset. Must be checked against local competition playing conditions.',
+  },
+  {
+    id: 'rules-50over-default',
+    name: '50-Over Playing Conditions (Default)',
+    format: 'one_day_50',
+    inningsOvers: 50,
+    phases: [
+      { phase: 'powerplay', oversRange: [1, 10], maxOutsideCircle: 2 },
+      { phase: 'middle_overs', oversRange: [11, 40], maxOutsideCircle: 4 },
+      { phase: 'death', oversRange: [41, 50], maxOutsideCircle: 5 },
+    ],
+    maxBehindSquareLeg: 2,
+    maxTotalLegSide: 5,
+    shortBallRulesNotes: 'Max 2 bouncers per over (ICC ODI rules). Confirm local limits.',
+    wideInterpretationNotes: 'Standard ODI wide guidelines apply.',
+    juniorSafetySettings: { allowShortBall: false, maxControlRequiredForShortBall: 4 },
+    effectiveDate: '2026-08-01',
+    sourceNote: 'Default 50-Over preset. Must be checked against local competition playing conditions.',
+  },
+  {
+    id: 'rules-twoday-default',
+    name: 'Two-Day / Multi-Day Playing Conditions (Default)',
+    format: 'two_day',
+    inningsOvers: 90,
+    phases: [
+      { phase: 'new_ball', oversRange: [1, 20], maxOutsideCircle: 9 },
+      { phase: 'middle_overs', oversRange: [21, 70], maxOutsideCircle: 9 },
+      { phase: 'old_ball', oversRange: [71, 90], maxOutsideCircle: 9 },
+    ],
+    maxBehindSquareLeg: 2,
+    shortBallRulesNotes: 'Max 2 bouncers per over under MCC Law 41.6. Umpire determines danger.',
+    wideInterpretationNotes: 'Traditional red-ball wide interpretation applies.',
+    juniorSafetySettings: { allowShortBall: false, maxControlRequiredForShortBall: 4 },
+    effectiveDate: '2026-08-01',
+    sourceNote: 'Default Two-Day preset. Must be checked against local competition playing conditions.',
+  },
+];
+

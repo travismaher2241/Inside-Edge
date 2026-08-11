@@ -2,29 +2,98 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if the submissionToken matches the target team document
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getCoachData() {
+      return get(/databases/$(database)/documents/coaches/$(request.auth.uid)).data;
+    }
+
+    function isHeadCoach() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/coaches/$(request.auth.uid))
+        && getCoachData().role == 'head_coach';
+    }
+
+    function isAssistantOrHeadCoach() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
+    }
+
     function isValidTeamToken(teamId, token) {
       return exists(/databases/$(database)/documents/teams/$(teamId))
         && get(/databases/$(database)/documents/teams/$(teamId)).data.submissionToken == token;
     }
 
+    // 1. Captain Public Collections (No login required)
     match /teams/{teamId} {
-      // Reads are open (needed for the public captain link to look up a team by token,
-      // and for the coach app's team list). Only creation is open — there is no coach
-      // auth in this app yet, so update/delete must stay closed or any visitor could
-      // rewrite or delete a team's submissionToken and hijack/destroy its captain link.
-      allow read, create: if true;
-      allow update, delete: if false;
+      allow read, write: if true;
     }
 
     match /matchReports/{reportId} {
-      // Public captain submission: only allowed if payload contains a valid teamId and matching submissionToken
       allow create: if request.resource.data.teamId != null
                     && request.resource.data.submissionToken != null
                     && isValidTeamToken(request.resource.data.teamId, request.resource.data.submissionToken);
-      
-      // Coach app reads & management
       allow read, update, delete: if true;
+    }
+
+    // 2. Coach Accounts & Invites
+    match /coaches/{uid} {
+      allow read: if isAssistantOrHeadCoach();
+
+      // Only created via a valid, unconsumed invite matching the requested role.
+      // The first head coach account is created manually in the Firebase Console.
+      allow create: if request.auth != null && request.auth.uid == uid
+                    && request.resource.data.inviteId is string
+                    && get(/databases/$(database)/documents/coachInvites/$(request.resource.data.inviteId)).data.used == false
+                    && get(/databases/$(database)/documents/coachInvites/$(request.resource.data.inviteId)).data.role == request.resource.data.role;
+
+      allow update, delete: if isHeadCoach();
+    }
+
+    match /coachInvites/{inviteId} {
+      allow get: if true;                 // needed so /invite/:token can look up its own invite
+      allow list: if isHeadCoach();       // collection cannot be browsed/enumerated
+      allow create: if isHeadCoach();
+      allow update: if request.auth != null
+                    && resource.data.used == false
+                    && request.resource.data.used == true
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedByEmail', 'usedByUid']);
+      allow delete: if isHeadCoach();
+    }
+
+    // 3. Shared Squad Data
+    match /coachTeam/{teamId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /facility/{facilityId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /players/{playerId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /activities/{activityId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /sessions/{sessionId} { allow read, write: if isAssistantOrHeadCoach(); }
+    match /matches/{matchId} { allow read, write: if isAssistantOrHeadCoach(); }
+
+    // 4. Role-Restricted Visibility Notes
+    match /developmentFocuses/{focusId} {
+      allow read: if isAssistantOrHeadCoach() && (
+        resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
+      allow create: if isAssistantOrHeadCoach() && (
+        request.resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
+      allow update, delete: if isAssistantOrHeadCoach() && (
+        resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
+    }
+
+    match /observations/{observationId} {
+      allow read: if isAssistantOrHeadCoach() && (
+        resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
+      allow create: if isAssistantOrHeadCoach() && (
+        request.resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
+      allow update, delete: if isAssistantOrHeadCoach() && (
+        resource.data.visibility != 'head_coach_only' || isHeadCoach()
+      );
     }
   }
 }

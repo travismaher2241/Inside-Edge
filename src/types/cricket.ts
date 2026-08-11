@@ -35,6 +35,8 @@ export type DevelopmentDomain =
 
 export type FocusState = 'Current Focus' | 'Developing' | 'Consistent' | 'Strength' | 'Archived';
 
+import type { BowlerCapability, BatterObservation, TacticalPhase, FieldSpot } from '../modules/cricket/tactics/types';
+
 export interface WorkloadRestriction {
   maxDeliveries?: number;
   restrictedBowler: boolean;
@@ -55,6 +57,12 @@ export interface Player {
   trainingAvailability: boolean;
   workloadRestriction?: WorkloadRestriction;
   activeDevelopmentFocusIds: string[];
+  // Bowling Profile Extensions
+  capabilities?: BowlerCapability[];
+  controlRating?: 1 | 2 | 3 | 4 | 5;
+  availableVariations?: string[];
+  preferredPhases?: TacticalPhase[];
+  tacticalNotes?: string;
 }
 
 export type LaneType = 'standard' | 'machine' | 'spin' | 'centre_strip' | 'indoor';
@@ -97,6 +105,7 @@ export interface Observation {
   focusId?: string; // Linked development focus
   sessionId?: string;
   coachName?: string;
+  visibility?: 'all_coaches' | 'head_coach_only';
 }
 
 export interface DevelopmentFocus {
@@ -110,7 +119,32 @@ export interface DevelopmentFocus {
   reviewDate: string; // ISO date
   evidenceObservationIds: string[];
   coachSummary: string;
+  visibility?: 'all_coaches' | 'head_coach_only';
 }
+
+export type CoachRole = 'head_coach' | 'assistant_coach';
+
+export interface CoachUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: CoachRole;
+  inviteId?: string;
+  createdAt: string;
+}
+
+export interface CoachInvite {
+  id: string;
+  token: string;
+  role: CoachRole;
+  createdByUid: string;
+  createdByName: string;
+  createdAt: string;
+  used: boolean;
+  usedByEmail?: string;
+  usedByUid?: string;
+}
+
 
 export interface Activity {
   id: string;
@@ -258,3 +292,57 @@ export interface MatchReport {
   taggedIssues: string[];
   createdAt: string;
 }
+
+export interface MatchSquad {
+  matchId: string;
+  selectedPlayerIds: string[]; // exactly 11 player IDs
+  wicketkeeperId: string;
+}
+
+export interface OppositionBatter {
+  id: string;
+  matchId: string;
+  name: string;
+  battingHand: BattingHand;
+  battingOrderPosition?: number;
+  observations: BatterObservation[];
+}
+
+export interface CompetitionRulesPhaseLimit {
+  phase: TacticalPhase;
+  oversRange: [number, number];
+  maxOutsideCircle: number;
+}
+
+export interface CompetitionRulesProfile {
+  id: string;
+  name: string;
+  format: 't20' | 'one_day_40' | 'one_day_50' | 'two_day' | 'custom';
+  inningsOvers: number;
+  phases: CompetitionRulesPhaseLimit[];
+  maxBehindSquareLeg: number; // default 2
+  maxTotalLegSide?: number;
+  shortBallRulesNotes?: string;
+  wideInterpretationNotes?: string;
+  juniorSafetySettings?: {
+    allowShortBall: boolean;
+    maxControlRequiredForShortBall?: number;
+  };
+  effectiveDate: string;
+  sourceNote: string;
+}
+
+export interface SavedTacticalPlan {
+  id: string;
+  matchId: string;
+  batterId: string;
+  bowlerId: string;
+  planId: string;
+  fieldPresetId: string;
+  positions: FieldSpot[];
+  captainNotes?: string;
+  status: 'suggested' | 'accepted' | 'edited' | 'working' | 'adjust' | 'abandon';
+  updatedAt: string;
+  warnings: string[];
+}
+

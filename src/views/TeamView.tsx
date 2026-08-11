@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, TrainingSession } from '../types/cricket';
 import { getRoleBadgeLabel, getBowlingStyleLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
 import { ShieldAlert, Plus, X, Check } from 'lucide-react';
+import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
+import { StorageEngine } from '../storage/db';
 
 interface TeamViewProps {
   players: Player[];
@@ -15,6 +17,7 @@ interface TeamViewProps {
   onAddDevelopmentFocus: (focus: DevelopmentFocus) => void;
   onUpdateDevelopmentFocusState: (focusId: string, newState: FocusState) => void;
   onAddPlayer: (player: Player) => void;
+  onUpdatePlayer?: (player: Player) => void;
 }
 
 export const TeamView: React.FC<TeamViewProps> = ({
@@ -26,7 +29,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
   onOpenQuickObservation,
   onAddDevelopmentFocus,
   onUpdateDevelopmentFocusState,
-  onAddPlayer
+  onAddPlayer,
+  onUpdatePlayer
 }) => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(players[0] || null);
 
@@ -174,6 +178,16 @@ export const TeamView: React.FC<TeamViewProps> = ({
               <span>{selectedPlayer.workloadRestriction.notes}</span>
             </div>
           )}
+
+          {/* Bowling Tactical Profile Section */}
+          <BowlingProfileEditor
+            player={selectedPlayer}
+            onSavePlayer={updated => {
+              StorageEngine.updatePlayer(updated);
+              setSelectedPlayer(updated);
+              if (onUpdatePlayer) onUpdatePlayer(updated);
+            }}
+          />
 
           {/* Active Development Focus Section (FR-013) */}
           <div style={{ marginTop: '16px' }}>

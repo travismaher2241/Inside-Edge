@@ -1,14 +1,14 @@
-// Live Training Mode Component (Zero-scroll outdoors phone viewport)
-
 import React, { useState, useEffect } from 'react';
 import type { TrainingSession, Player, Facility } from '../types/cricket';
-import { Play, Pause, SkipForward, ArrowLeft, Users, CheckCircle2 } from 'lucide-react';
+import { Play, Pause, SkipForward, ArrowLeft, Users, CheckCircle2, Target } from 'lucide-react';
 import { NetVisualizer } from '../components/cricket/NetVisualizer';
+import { CaptainPlanMode } from '../components/cricket/tactics/CaptainPlanMode';
 
 interface LiveModeViewProps {
   session: TrainingSession;
   players: Player[];
   facility: Facility;
+  matchId?: string;
   onExitLive: () => void;
   onOpenQuickObservation: (player: Player) => void;
   onCompleteSession: () => void;
@@ -18,6 +18,7 @@ export const LiveModeView: React.FC<LiveModeViewProps> = ({
   session,
   players,
   facility,
+  matchId = 'match-1',
   onExitLive,
   onOpenQuickObservation,
   onCompleteSession
@@ -26,6 +27,7 @@ export const LiveModeView: React.FC<LiveModeViewProps> = ({
   const [activeRotationIdx, setActiveRotationIdx] = useState<number>(session.activeRotationIndex || 0);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(12 * 60);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
+  const [isCaptainModeOpen, setIsCaptainModeOpen] = useState<boolean>(false);
 
   const currentBlock = session.blocks[activeBlockIdx] || session.blocks[0];
   const isRotationBlock = currentBlock.blockType === 'rotation';
@@ -77,8 +79,22 @@ export const LiveModeView: React.FC<LiveModeViewProps> = ({
         >
           <ArrowLeft size={18} /> Exit Live Mode
         </button>
+        <button
+          onClick={() => setIsCaptainModeOpen(true)}
+          style={{ background: 'var(--accent-gold-soft)', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', padding: '4px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          <Target size={14} /> CAPTAIN PLANS
+        </button>
         <span className="badge badge-live">● LIVE SESSION</span>
       </div>
+
+      {isCaptainModeOpen && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsCaptainModeOpen(false)}>
+          <div className="bottom-sheet-content" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <CaptainPlanMode matchId={matchId} players={players} onClose={() => setIsCaptainModeOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Hero Timer Display */}
       <div className="live-timer-hero">

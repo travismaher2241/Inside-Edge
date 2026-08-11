@@ -139,5 +139,6 @@ export interface TacticalContext {
   pitch?: 'seaming' | 'slow' | 'turning' | 'low' | 'bouncy' | 'flat';
   ball?: 'new' | 'used' | 'old' | 'wet';
   localRulesConfirmed: boolean;
+  isJunior?: boolean;
 }
 

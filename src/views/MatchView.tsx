@@ -1,16 +1,22 @@
-// Match Module & Match-to-Training Loop View for Inside Edge (FR-015, Blueprint §13)
-
 import React, { useState, lazy, Suspense } from 'react';
-import type { MatchRecord, MatchObservation } from '../types/cricket';
+import type { MatchRecord, MatchObservation, Player, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan } from '../types/cricket';
+import type { TacticalContext, FieldSpot, BowlingPlan } from '../modules/cricket/tactics/types';
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
-import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy } from 'lucide-react';
+import { StorageEngine } from '../storage/db';
+import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target, FileText } from 'lucide-react';
+
+import { MatchSquadSelector } from '../components/cricket/tactics/MatchSquadSelector';
+import { OppositionBatterManager } from '../components/cricket/tactics/OppositionBatterManager';
+import { RulesProfileSelector } from '../components/cricket/tactics/RulesProfileSelector';
+import { BowlingPlanGenerator } from '../components/cricket/tactics/BowlingPlanGenerator';
+import { FieldBoardModal } from '../components/cricket/FieldBoardModal';
 
 const WeeklyRoundupView = lazy(() => import('./WeeklyRoundupView').then(m => ({ default: m.WeeklyRoundupView })));
 const MatchCreationModal = lazy(() => import('../components/cricket/MatchCreationModal').then(m => ({ default: m.MatchCreationModal })));
 
-
 interface MatchViewProps {
   matches: MatchRecord[];
+  players?: Player[];
   selectedMatchId?: string;
   onSelectMatch: (matchId: string) => void;
   onAddMatch: (match: MatchRecord) => void;
@@ -20,6 +26,7 @@ interface MatchViewProps {
 
 export const MatchView: React.FC<MatchViewProps> = ({
   matches,
+  players = [],
   selectedMatchId,
   onSelectMatch,
   onAddMatch,
@@ -47,6 +54,35 @@ export const MatchView: React.FC<MatchViewProps> = ({
   );
   const [newPriorityInput, setNewPriorityInput] = useState<string>('');
 
+
+  // Pre-Match Opposition Tactical Planning State
+  const [preMatchSubTab, setPreMatchSubTab] = useState<'opposition' | 'strategy'>('opposition');
+  const [tacticalStage, setTacticalStage] = useState<1 | 2 | 3 | 4>(1);
+
+  // Scoped Data State for Current Match
+  const matchId = currentMatch?.id || 'match-1';
+  const [matchSquad, setMatchSquad] = useState<MatchSquad | undefined>(() => StorageEngine.getMatchSquad(matchId));
+  const [oppositionBatters, setOppositionBatters] = useState<OppositionBatter[]>(() => StorageEngine.getOppositionBatters(matchId));
+  const [rulesProfiles] = useState<CompetitionRulesProfile[]>(() => StorageEngine.getRulesProfiles());
+  const [selectedRulesProfileId, setSelectedRulesProfileId] = useState<string>('rules-t20-default');
+  const [savedTacticalPlans, setSavedTacticalPlans] = useState<SavedTacticalPlan[]>(() => StorageEngine.getSavedTacticalPlans(matchId));
+
+  const [tacticalContext, setTacticalContext] = useState<TacticalContext>({
+    batterHand: 'right',
+    format: currentMatch?.format === 'Two Day' ? 'multi_day' : currentMatch?.format === 'T20' ? 't20' : 'one_day',
+    phase: 'new_ball',
+    maxFieldersOutsideCircle: 2,
+    localRulesConfirmed: true,
+    isJunior: currentMatch?.format === 'Junior 20 Overs',
+  });
+
+  const [fieldBoardModalData, setFieldBoardModalData] = useState<{
+    isOpen: boolean;
+    bowler?: Player;
+    plan?: BowlingPlan;
+    positions?: FieldSpot[];
+  }>({ isOpen: false });
+
   // Keep derivedPriorities buffer in sync when switching match
   const handleSelectMatch = (matchId: string) => {
     onSelectMatch(matchId);
@@ -54,6 +90,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
     setDerivedPriorities(target?.postMatchReview?.trainingPrioritiesDerived || []);
     setMatchResultText(target?.result || '');
     setIsAddObservationOpen(false);
+
+    // Sync tactical state for newly selected match
+    setMatchSquad(StorageEngine.getMatchSquad(matchId));
+    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
   };
 
   // A newly created match isn't in the `matches` prop yet (parent state update is
@@ -518,43 +559,221 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
       {/* Pre-Match Plan Tab */}
       {activeTab === 'pre' && (
-        <div className="card">
-          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>PRE-MATCH STRATEGY PLAN</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>v {currentMatch.opponent}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Sub-tab Switcher: Opposition Plans vs Tactical Strategy */}
+          <div style={{ display: 'flex', background: 'var(--bg-surface-card)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border-light)' }}>
+            <button
+              onClick={() => setPreMatchSubTab('opposition')}
+              style={{
+                flex: 1,
+                padding: '8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: preMatchSubTab === 'opposition' ? 'var(--accent-gold-soft)' : 'transparent',
+                color: preMatchSubTab === 'opposition' ? 'var(--accent-gold)' : 'var(--text-secondary)',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+            >
+              <Target size={14} /> OPPOSITION PLANS (4-STAGE WORKFLOW)
+            </button>
+            <button
+              onClick={() => setPreMatchSubTab('strategy')}
+              style={{
+                flex: 1,
+                padding: '8px',
+                borderRadius: '6px',
+                border: 'none',
+                background: preMatchSubTab === 'strategy' ? 'var(--accent-gold-soft)' : 'transparent',
+                color: preMatchSubTab === 'strategy' ? 'var(--accent-gold)' : 'var(--text-secondary)',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+            >
+              <FileText size={14} /> TEAM STRATEGY SUMMARY
+            </button>
           </div>
-          <div style={{ marginTop: '12px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Team Objectives</div>
-              <ul style={{ paddingLeft: '16px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
-                  <li key={i}>{obj}</li>
-                ))}
-              </ul>
-            </div>
 
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Batting Strategy</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.battingNotes}
-              </p>
-            </div>
+          {preMatchSubTab === 'opposition' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* 4-Stage Navigation Header */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px' }}>
+                {[
+                  { stage: 1, label: '1. Selected XI', icon: Users },
+                  { stage: 2, label: '2. Opposition', icon: User },
+                  { stage: 3, label: '3. Conditions', icon: Shield },
+                  { stage: 4, label: '4. Bowling Plans', icon: Target },
+                ].map(({ stage, label, icon: Icon }) => {
+                  const isActive = tacticalStage === stage;
+                  return (
+                    <button
+                      key={stage}
+                      onClick={() => setTacticalStage(stage as any)}
+                      style={{
+                        padding: '8px 4px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: isActive ? 'var(--primary-green)' : 'transparent',
+                        color: isActive ? '#fff' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <Icon size={14} />
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Bowling Strategy</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.bowlingNotes}
-              </p>
-            </div>
+              {/* Stage Components Render */}
+              {tacticalStage === 1 && (
+                <MatchSquadSelector
+                  matchId={matchId}
+                  players={players}
+                  savedSquad={matchSquad}
+                  onSaveSquad={squadData => {
+                    StorageEngine.saveMatchSquad(squadData);
+                    setMatchSquad(squadData);
+                    setTacticalStage(2);
+                  }}
+                />
+              )}
 
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Fielding Focus</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.fieldingFocus}
-              </p>
+              {tacticalStage === 2 && (
+                <OppositionBatterManager
+                  matchId={matchId}
+                  batters={oppositionBatters}
+                  onSaveBatter={batterData => {
+                    StorageEngine.saveOppositionBatter(batterData);
+                    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                  }}
+                  onDeleteBatter={id => {
+                    StorageEngine.deleteOppositionBatter(id);
+                    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                  }}
+                />
+              )}
+
+              {tacticalStage === 3 && (
+                <RulesProfileSelector
+                  profiles={rulesProfiles}
+                  selectedProfileId={selectedRulesProfileId}
+                  onSelectProfileId={setSelectedRulesProfileId}
+                  context={tacticalContext}
+                  onUpdateContext={setTacticalContext}
+                />
+              )}
+
+              {tacticalStage === 4 && (
+                <BowlingPlanGenerator
+                  matchId={matchId}
+                  selectedXI={players.filter(p => matchSquad?.selectedPlayerIds.includes(p.id) || matchSquad === undefined)}
+                  batters={oppositionBatters}
+                  context={tacticalContext}
+                  savedPlans={savedTacticalPlans}
+                  onSavePlan={planData => {
+                    StorageEngine.saveTacticalPlan(planData);
+                    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                  }}
+                  onOpenFieldBoard={(bowler, plan, positions) => {
+                    setFieldBoardModalData({
+                      isOpen: true,
+                      bowler,
+                      plan,
+                      positions,
+                    });
+                  }}
+                />
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="card">
+              <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>PRE-MATCH STRATEGY PLAN</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>v {currentMatch.opponent}</span>
+              </div>
+              <div style={{ marginTop: '12px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Team Objectives</div>
+                  <ul style={{ paddingLeft: '16px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
+                      <li key={i}>{obj}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Batting Strategy</div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.battingNotes}
+                  </p>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Bowling Strategy</div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.bowlingNotes}
+                  </p>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Fielding Focus</div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.fieldingFocus}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Interactive Field Board Modal Triggered from BowlerPlanCard */}
+      {fieldBoardModalData.isOpen && fieldBoardModalData.bowler && fieldBoardModalData.plan && (
+        <FieldBoardModal
+          onClose={() => setFieldBoardModalData({ isOpen: false })}
+          initialBatterHand={tacticalContext.batterHand}
+          initialPresetId={fieldBoardModalData.plan.fieldPresetId}
+          initialPositions={fieldBoardModalData.positions}
+          bowlerName={fieldBoardModalData.bowler.name}
+          planTitle={fieldBoardModalData.plan.title}
+          maxOutsideCircle={tacticalContext.maxFieldersOutsideCircle}
+          onSaveField={updatedPositions => {
+            const activeBatterId = oppositionBatters[0]?.id || 'bat-1';
+            const planToSave: SavedTacticalPlan = {
+              id: `plan-${Date.now()}-${fieldBoardModalData.bowler?.id}`,
+              matchId,
+              batterId: activeBatterId,
+              bowlerId: fieldBoardModalData.bowler!.id,
+              planId: fieldBoardModalData.plan!.id,
+              fieldPresetId: fieldBoardModalData.plan!.fieldPresetId,
+              positions: updatedPositions,
+              status: 'edited',
+              updatedAt: new Date().toISOString(),
+              warnings: [],
+            };
+            StorageEngine.saveTacticalPlan(planToSave);
+            setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+            setFieldBoardModalData({ isOpen: false });
+          }}
+        />
       )}
 
       {/* Match Creation Modal */}

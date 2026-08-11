@@ -1,83 +1,89 @@
-// Interactive Cricket Field Setting Board Component (Draggable & Blank by Default per §17.1)
+// Refactored Interactive Cricket Field Setting Board Component (10 Markers: Keeper + 9 Fielders)
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { FieldPosition, BattingHand } from '../../types/cricket';
-import { X, Shield, Plus, Trash2 } from 'lucide-react';
+import type { BattingHand } from '../../types/cricket';
+import type { FieldSpot, FieldSide } from '../../modules/cricket/tactics/types';
+import { TACTICAL_FIELD_PRESETS, fieldForBatterHand } from '../../modules/cricket/tactics/fieldPresets';
+import { X, Shield, RotateCcw, AlertTriangle, Check, Info } from 'lucide-react';
 
 interface FieldBoardModalProps {
   onClose: () => void;
+  initialBatterHand?: BattingHand;
+  initialPresetId?: string;
+  initialPositions?: FieldSpot[];
+  bowlerName?: string;
+  planTitle?: string;
+  maxOutsideCircle?: number;
+  maxBehindSquareLeg?: number;
+  maxTotalLegSide?: number;
+  shortBoundarySide?: FieldSide;
+  onSaveField?: (positions: FieldSpot[]) => void;
 }
 
-
-const PRESET_POSITIONS: Record<string, FieldPosition[]> = {
-  'Standard 3-Slip Seam': [
-    { id: 'f-1', name: 'Wicketkeeper', x: 50, y: 88 },
-    { id: 'f-2', name: '1st Slip', x: 42, y: 82 },
-    { id: 'f-3', name: '2nd Slip', x: 35, y: 78 },
-    { id: 'f-4', name: 'Gully', x: 26, y: 70 },
-    { id: 'f-5', name: 'Point', x: 18, y: 55 },
-    { id: 'f-6', name: 'Cover', x: 25, y: 38 },
-    { id: 'f-7', name: 'Mid-Off', x: 40, y: 28 },
-    { id: 'f-8', name: 'Mid-On', x: 60, y: 28 },
-    { id: 'f-9', name: 'Mid-Wicket', x: 75, y: 40 },
-    { id: 'f-10', name: 'Square Leg', x: 82, y: 58 },
-    { id: 'f-11', name: 'Fine Leg', x: 65, y: 80 }
-  ],
-  'Spin Ring 5-4': [
-    { id: 'f-1', name: 'Wicketkeeper', x: 50, y: 86 },
-    { id: 'f-2', name: 'Slip', x: 42, y: 80 },
-    { id: 'f-3', name: 'Short Leg', x: 56, y: 65 },
-    { id: 'f-4', name: 'Backward Point', x: 20, y: 56 },
-    { id: 'f-5', name: 'Cover', x: 28, y: 40 },
-    { id: 'f-6', name: 'Mid-Off', x: 42, y: 26 },
-    { id: 'f-7', name: 'Mid-On', x: 58, y: 26 },
-    { id: 'f-8', name: 'Mid-Wicket', x: 74, y: 42 },
-    { id: 'f-9', name: 'Square Leg', x: 80, y: 60 },
-    { id: 'f-10', name: 'Deep Mid-Wicket', x: 88, y: 20 },
-    { id: 'f-11', name: 'Long-Off', x: 30, y: 12 }
-  ],
-  'Death 5-Out Boundary': [
-    { id: 'f-1', name: 'Wicketkeeper', x: 50, y: 88 },
-    { id: 'f-2', name: 'Short Third', x: 28, y: 74 },
-    { id: 'f-3', name: 'Extra Cover', x: 28, y: 40 },
-    { id: 'f-4', name: 'Mid-Off', x: 42, y: 30 },
-    { id: 'f-5', name: 'Mid-On', x: 58, y: 30 },
-    { id: 'f-6', name: 'Deep Point', x: 10, y: 55 },
-    { id: 'f-7', name: 'Deep Cover', x: 15, y: 20 },
-    { id: 'f-8', name: 'Long-Off', x: 35, y: 10 },
-    { id: 'f-9', name: 'Long-On', x: 65, y: 10 },
-    { id: 'f-10', name: 'Deep Mid-Wicket', x: 88, y: 25 },
-    { id: 'f-11', name: 'Deep Fine Leg', x: 80, y: 82 }
-  ],
-  'Blank Board': []
-};
-
-export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => {
-  const [batterHand, setBatterHand] = useState<BattingHand>('right');
-  const [positions, setPositions] = useState<FieldPosition[]>([]);
-  const [selectedPreset, setSelectedPreset] = useState<string>('Blank Board');
+export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
+  onClose,
+  initialBatterHand = 'right',
+  initialPresetId = 'pace_fourth_stump_pressure',
+  initialPositions,
+  bowlerName,
+  planTitle,
+  maxOutsideCircle = 5,
+  maxBehindSquareLeg = 2,
+  maxTotalLegSide = 5,
+  shortBoundarySide,
+  onSaveField,
+}) => {
+  const [batterHand, setBatterHand] = useState<BattingHand>(initialBatterHand);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(initialPresetId);
+  const [selectedFielderId, setSelectedFielderId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Initialize positions: if initialPositions provided and valid, use them; else load preset for batter hand
+  const [positions, setPositions] = useState<FieldSpot[]>(() => {
+    if (initialPositions && initialPositions.length === 10) {
+      return initialPositions;
+    }
+    const preset = TACTICAL_FIELD_PRESETS.find(p => p.id === initialPresetId) || TACTICAL_FIELD_PRESETS[0];
+    return fieldForBatterHand(preset, initialBatterHand).positions;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const loadPreset = (presetName: string) => {
-    setSelectedPreset(presetName);
-    setPositions(PRESET_POSITIONS[presetName] || []);
+  const loadPreset = (presetId: string, hand: BattingHand) => {
+    setSelectedPresetId(presetId);
+    const raw = TACTICAL_FIELD_PRESETS.find(p => p.id === presetId) || TACTICAL_FIELD_PRESETS[0];
+    const mirrored = fieldForBatterHand(raw, hand);
+    setPositions(mirrored.positions);
+    setSelectedFielderId(null);
+  };
+
+  const handleBatterHandToggle = (hand: BattingHand) => {
+    setBatterHand(hand);
+    // Mirror current positions across x=50
+    setPositions(prev =>
+      prev.map(p => ({
+        ...p,
+        x: 100 - p.x,
+      }))
+    );
+  };
+
+  const handleResetToPreset = () => {
+    loadPreset(selectedPresetId, batterHand);
   };
 
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
     e.stopPropagation();
     setDraggingId(id);
+    setSelectedFielderId(id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
@@ -90,40 +96,79 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
     const xPercent = Math.round((xPx / rect.width) * 100);
     const yPercent = Math.round((yPx / rect.height) * 100);
 
+    // Compute depth dynamically based on distance from center pitch (50, 50)
+    const distFromCenter = Math.sqrt(Math.pow(xPercent - 50, 2) + Math.pow(yPercent - 50, 2));
+    const isOutfield = distFromCenter > 32; // Beyond 30-yard circle (~32% radius)
+
+    // Compute whether behind square on leg side:
+    // For RHB: leg side is x > 50. Behind popping crease is y > 60.
+    // For LHB: leg side is x < 50. Behind popping crease is y > 60.
+    const isLegSide = batterHand === 'right' ? xPercent > 50 : xPercent < 50;
+    const isBehindSquare = isLegSide && yPercent > 60;
+
     setPositions(prev =>
-      prev.map(p => (p.id === draggingId ? { ...p, x: xPercent, y: yPercent } : p))
+      prev.map(p => {
+        if (p.id !== draggingId) return p;
+        return {
+          ...p,
+          x: xPercent,
+          y: yPercent,
+          depth: isOutfield ? 'boundary' : p.depth === 'close' ? 'close' : 'inner_ring',
+          side: xPercent === 50 ? 'straight' : isLegSide ? 'leg' : 'off',
+          behindSquareLeg: isBehindSquare,
+        };
+      })
     );
   };
 
   const handlePointerUp = () => {
-    if (draggingId) {
-      setDraggingId(null);
-    }
+    if (draggingId) setDraggingId(null);
   };
 
-  const handleAddFielder = () => {
-    setPositions(prev => {
-      if (prev.length >= 11) return prev;
-      const newPosition: FieldPosition = {
-        id: `f-${Date.now()}-${prev.length}`,
-        name: `Fielder ${prev.length + 1}`,
-        x: 50,
-        y: 50
-      };
-      return [...prev, newPosition];
-    });
+  // Legality Calculations & Validation
+  const countKeeper = positions.filter(p => p.id === 'wk').length;
+  const countOutsideCircle = positions.filter(p => p.depth === 'outfield' || p.depth === 'boundary' || Math.sqrt(Math.pow(p.x - 50, 2) + Math.pow(p.y - 50, 2)) > 32).length;
+  const countBehindSquareLeg = positions.filter(p => p.behindSquareLeg && p.id !== 'wk').length;
+  const countLegSideTotal = positions.filter(p => p.side === 'leg' && p.id !== 'wk').length;
+
+  const validationErrors: string[] = [];
+  if (positions.length !== 10) {
+    validationErrors.push(`Field must contain exactly 10 markers (1 Wicketkeeper + 9 Fielders; Bowler is separate). Currently: ${positions.length}`);
+  }
+  if (countKeeper !== 1) {
+    validationErrors.push('Field must contain exactly 1 Wicketkeeper.');
+  }
+  if (countBehindSquareLeg > maxBehindSquareLeg) {
+    validationErrors.push(`Illegal field: ${countBehindSquareLeg} fielders behind square on the leg side (max permitted: ${maxBehindSquareLeg}).`);
+  }
+  if (countOutsideCircle > maxOutsideCircle) {
+    validationErrors.push(`Illegal field: ${countOutsideCircle} fielders outside 30-yard circle (current phase max: ${maxOutsideCircle}).`);
+  }
+  if (maxTotalLegSide && countLegSideTotal > maxTotalLegSide) {
+    validationErrors.push(`Illegal field: ${countLegSideTotal} leg-side fielders (competition max: ${maxTotalLegSide}).`);
+  }
+
+  const isLegal = validationErrors.length === 0;
+  const selectedFielder = positions.find(p => p.id === selectedFielderId);
+
+  const handleSave = () => {
+    if (!isLegal) return;
+    if (onSaveField) {
+      onSaveField(positions);
+    }
+    onClose();
   };
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
-      <div className="bottom-sheet-content" style={{ maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
-              CRICKET TACTICS BOARD
+              TACTICAL FIELD BOARD {bowlerName ? `• ${bowlerName}` : ''}
             </div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>Field Setting Canvas</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{planTitle || 'Tactical Field Setting'}</div>
           </div>
           <button
             type="button"
@@ -135,14 +180,34 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
           </button>
         </div>
 
+        {/* Validation Errors & Status Bar */}
+        {!isLegal ? (
+          <div style={{ background: 'rgba(231, 111, 81, 0.15)', border: '1px solid #f97316', padding: '8px 12px', borderRadius: '8px', marginBottom: '10px', fontSize: '0.78rem', color: '#f97316', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {validationErrors.map((err, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={14} />
+                <span>{err}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--primary-green-light)', padding: '6px 12px', borderRadius: '8px', marginBottom: '10px', fontSize: '0.75rem', color: 'var(--primary-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Check size={14} />
+              <span>Legal Field Setting Verified (1 Keeper + 9 Fielders)</span>
+            </div>
+            <span>Outside Circle: {countOutsideCircle}/{maxOutsideCircle} • Behind Square: {countBehindSquareLeg}/{maxBehindSquareLeg}</span>
+          </div>
+        )}
 
-        {/* Preset & Controls */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        {/* Controls: Batter Hand & Preset Selection */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
           <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>BATTER HAND</label>
-            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>STRIKER HAND</label>
+            <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
               <button
-                onClick={() => setBatterHand('right')}
+                type="button"
+                onClick={() => handleBatterHandToggle('right')}
                 style={{
                   flex: 1,
                   padding: '6px',
@@ -157,7 +222,8 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                 RHB
               </button>
               <button
-                onClick={() => setBatterHand('left')}
+                type="button"
+                onClick={() => handleBatterHandToggle('left')}
                 style={{
                   flex: 1,
                   padding: '6px',
@@ -174,15 +240,15 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
             </div>
           </div>
 
-          <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>PRESET PLAN</label>
+          <div style={{ flex: 2, minWidth: '200px' }}>
+            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>LOAD TACTICAL PRESET</label>
             <select
-              value={selectedPreset}
-              onChange={e => loadPreset(e.target.value)}
+              value={selectedPresetId}
+              onChange={e => loadPreset(e.target.value, batterHand)}
               style={{
                 width: '100%',
                 padding: '6px',
-                marginTop: '4px',
+                marginTop: '2px',
                 background: 'var(--bg-surface-card)',
                 border: '1px solid var(--border-light)',
                 borderRadius: '6px',
@@ -190,15 +256,16 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                 fontSize: '0.75rem'
               }}
             >
-              <option value="Blank Board">Blank Board (Default)</option>
-              <option value="Standard 3-Slip Seam">Standard 3-Slip Seam</option>
-              <option value="Spin Ring 5-4">Spin Ring 5-4</option>
-              <option value="Death 5-Out Boundary">Death 5-Out Boundary</option>
+              {TACTICAL_FIELD_PRESETS.map(preset => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name} ({preset.intent.toUpperCase()})
+                </option>
+              ))}
             </select>
           </div>
         </div>
 
-        {/* Cricket Oval Pitch Canvas with Draggable Fielders */}
+        {/* Cricket Oval Pitch Canvas */}
         <div
           ref={canvasRef}
           onPointerMove={handlePointerMove}
@@ -206,16 +273,37 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
           style={{
             position: 'relative',
             width: '100%',
-            height: '320px',
+            height: '330px',
             background: 'radial-gradient(circle, #1a4733 0%, #0d291e 75%, #081711 100%)',
             borderRadius: '16px',
             border: '2px solid var(--primary-green-light)',
             overflow: 'hidden',
-            margin: '0 auto 12px auto',
+            margin: '0 auto 8px auto',
             boxShadow: 'inset 0 0 20px rgba(0,0,0,0.6)',
             touchAction: 'none'
           }}
         >
+          {/* Short Boundary Indicator if supplied */}
+          {shortBoundarySide && shortBoundarySide !== 'straight' && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '8px',
+                left: shortBoundarySide === 'off' ? (batterHand === 'right' ? '12px' : 'auto') : (batterHand === 'right' ? 'auto' : '12px'),
+                right: shortBoundarySide === 'off' ? (batterHand === 'right' ? 'auto' : '12px') : (batterHand === 'right' ? '12px' : 'auto'),
+                background: 'rgba(249, 115, 22, 0.85)',
+                color: '#fff',
+                fontSize: '0.65rem',
+                fontWeight: 800,
+                padding: '2px 6px',
+                borderRadius: '4px',
+                pointerEvents: 'none',
+              }}
+            >
+              SHORT BOUNDARY
+            </div>
+          )}
+
           {/* Inner 30-yard Circle */}
           <div
             style={{
@@ -226,7 +314,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
               width: '210px',
               height: '210px',
               borderRadius: '50%',
-              border: '1px dashed rgba(255, 255, 255, 0.25)',
+              border: '1px dashed rgba(255, 255, 255, 0.3)',
               pointerEvents: 'none'
             }}
           />
@@ -244,7 +332,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
               borderRadius: '2px',
               opacity: 0.85,
               display: 'flex',
-              flexDirection: 'column' as const,
+              flexDirection: 'column',
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '4px 0',
@@ -255,18 +343,38 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
             <div style={{ width: '16px', height: '2px', background: '#ffffff' }} />
           </div>
 
-          {/* Batter & Bowler Indicator */}
-          <div style={{ position: 'absolute', bottom: '70px', left: '50%', transform: 'translateX(-50%)', color: 'var(--accent-gold)', fontSize: '0.65rem', fontWeight: 800, pointerEvents: 'none' }}>
+          {/* Bowler Marker at top of pitch (implicit bowler displayed separately) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '32%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              pointerEvents: 'none',
+              zIndex: 3
+            }}
+          >
+            <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: '#38bdf8', border: '2px solid #fff', boxShadow: '0 2px 6px rgba(0,0,0,0.6)' }} />
+            <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#38bdf8', background: 'rgba(0,0,0,0.85)', padding: '1px 4px', borderRadius: '4px', marginTop: '2px' }}>
+              BOWLER
+            </span>
+          </div>
+
+          {/* Striker Indicator */}
+          <div style={{ position: 'absolute', bottom: '66px', left: '50%', transform: 'translateX(-50%)', color: 'var(--accent-gold)', fontSize: '0.65rem', fontWeight: 800, pointerEvents: 'none' }}>
             {batterHand === 'right' ? 'RHB STRIKER' : 'LHB STRIKER'}
           </div>
 
-          {/* Render Blank Board Placeholder or Draggable Field Position Dots */}
-          {positions.length === 0 ? (
-            <div style={{ position: 'absolute', top: '25%', left: '50%', transform: 'translateX(-50%)', color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center', pointerEvents: 'none' }}>
-              Blank Board • Tap "+ Add Fielder" or choose a Preset
-            </div>
-          ) : (
-            positions.map(p => (
+          {/* Render 10 Draggable Fielders */}
+          {positions.map(p => {
+            const isSelected = selectedFielderId === p.id;
+            const isDragging = draggingId === p.id;
+            const isWk = p.id === 'wk';
+
+            return (
               <div
                 key={p.id}
                 onPointerDown={e => handlePointerDown(p.id, e)}
@@ -276,11 +384,11 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                   left: `${p.x}%`,
                   transform: 'translate(-50%, -50%)',
                   display: 'flex',
-                  flexDirection: 'column' as const,
+                  flexDirection: 'column',
                   alignItems: 'center',
                   cursor: 'grab',
                   touchAction: 'none',
-                  zIndex: draggingId === p.id ? 10 : 2
+                  zIndex: isDragging || isSelected ? 10 : 2
                 }}
               >
                 <div
@@ -288,9 +396,11 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                     width: '20px',
                     height: '20px',
                     borderRadius: '50%',
-                    background: draggingId === p.id ? '#ffffff' : 'var(--accent-gold)',
-                    border: '2px solid #ffffff',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.6)'
+                    background: isDragging ? '#ffffff' : isWk ? '#f97316' : p.behindSquareLeg ? '#ef4444' : 'var(--accent-gold)',
+                    border: isSelected ? '3px solid #ffffff' : '2px solid #ffffff',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.7)',
+                    transform: isSelected ? 'scale(1.2)' : 'scale(1)',
+                    transition: 'transform 0.15s ease'
                   }}
                 />
                 <span
@@ -298,7 +408,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                     fontSize: '0.6rem',
                     fontWeight: 700,
                     color: '#ffffff',
-                    background: 'rgba(0,0,0,0.85)',
+                    background: isSelected ? 'var(--primary-green)' : 'rgba(0,0,0,0.85)',
                     padding: '1px 4px',
                     borderRadius: '4px',
                     marginTop: '2px',
@@ -308,23 +418,35 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
                   {p.name}
                 </span>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
 
-        {/* Toolbar & Footer Actions */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-          <button className="btn btn-secondary" onClick={handleAddFielder} style={{ flex: 1, fontSize: '0.8rem' }}>
-            <Plus size={14} /> ADD FIELDER ({positions.length}/11)
-          </button>
-          <button className="btn btn-secondary" onClick={() => loadPreset('Blank Board')} style={{ flex: 1, fontSize: '0.8rem' }}>
-            <Trash2 size={14} /> CLEAR ALL
-          </button>
-        </div>
+        {/* Selected Fielder Role Tooltip */}
+        {selectedFielder && (
+          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-gold)', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Info size={16} color="var(--accent-gold)" />
+            <div>
+              <strong style={{ color: 'var(--accent-gold)' }}>{selectedFielder.name} ({selectedFielder.side.toUpperCase()}): </strong>
+              <span>{selectedFielder.role}</span>
+              {selectedFielder.behindSquareLeg && <span style={{ color: '#f97316', marginLeft: '6px', fontWeight: 700 }}>(Behind Square Leg)</span>}
+            </div>
+          </div>
+        )}
 
+        {/* Footer Actions */}
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-gold" onClick={onClose} style={{ flex: 1 }}>
-            <Shield size={16} /> SAVE FIELD PLAN
+          <button className="btn btn-secondary" onClick={handleResetToPreset} style={{ flex: 1, fontSize: '0.8rem' }}>
+            <RotateCcw size={14} /> RESET PRESET
+          </button>
+
+          <button
+            className="btn btn-gold"
+            onClick={handleSave}
+            disabled={!isLegal}
+            style={{ flex: 2, opacity: isLegal ? 1 : 0.5 }}
+          >
+            <Shield size={16} /> SAVE FIELD SETTING
           </button>
         </div>
       </div>

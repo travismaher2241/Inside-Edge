@@ -1,9 +1,13 @@
-// Inside Edge Main Application Component
-
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import './styles/designTokens.css';
-import { StorageEngine } from './storage/db';
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState } from './types/cricket';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { auth } from './lib/firebase';
+import {
+  subscribeToCoachProfile,
+  logoutCoach
+} from './modules/cricket/authService';
+import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
@@ -12,36 +16,96 @@ import { TrainView } from './views/TrainView';
 import { TeamView } from './views/TeamView';
 import { MatchView } from './views/MatchView';
 import { LibraryView } from './views/LibraryView';
+import { LoginView } from './views/LoginView';
+import { AcceptInviteView } from './views/AcceptInviteView';
+import { CoachManagerModal } from './components/cricket/CoachManagerModal';
 import { QuickObservationDrawer } from './components/cricket/QuickObservationDrawer';
+import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS } from './modules/cricket/seedData';
 
 const LiveModeView = lazy(() => import('./views/LiveModeView').then(m => ({ default: m.LiveModeView })));
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const FieldBoardModal = lazy(() => import('./components/cricket/FieldBoardModal').then(m => ({ default: m.FieldBoardModal })));
 
-
 export function App() {
+  // Auth & Coach State
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [coachProfile, setCoachProfile] = useState<CoachUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isCoachManagerOpen, setIsCoachManagerOpen] = useState<boolean>(false);
+
+  // App Tab & View State
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isLiveMode, setIsLiveMode] = useState<boolean>(false);
   const [isFieldBoardOpen, setIsFieldBoardOpen] = useState<boolean>(false);
 
-  // App Data State loaded from Storage Engine
-  const [team] = useState<Team>(StorageEngine.getTeam());
-  const [facility] = useState<Facility>(StorageEngine.getFacility());
-  const [players, setPlayers] = useState<Player[]>(StorageEngine.getPlayers());
-  const [activities] = useState<Activity[]>(StorageEngine.getActivities());
-  const [session, setSession] = useState<TrainingSession>(StorageEngine.getSession());
-  const [matches, setMatches] = useState<MatchRecord[]>(StorageEngine.getMatches());
+  // Firestore Real-Time Squad Data State
+  const [team, setTeam] = useState<Team>(SEED_TEAM);
+  const [facility, setFacility] = useState<Facility>(SEED_FACILITY);
+  const [players, setPlayers] = useState<Player[]>(SEED_PLAYERS);
+  const [activities, setActivities] = useState<Activity[]>(SEED_ACTIVITIES);
+  const [session, setSession] = useState<TrainingSession>(SEED_SESSION);
+  const [matches, setMatches] = useState<MatchRecord[]>([SEED_MATCH_RECORD]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | undefined>(undefined);
-  const [focuses, setFocuses] = useState<DevelopmentFocus[]>(StorageEngine.getDevelopmentFocuses());
-  const [observations, setObservations] = useState<Observation[]>(StorageEngine.getObservations());
+  const [focuses, setFocuses] = useState<DevelopmentFocus[]>(SEED_DEVELOPMENT_FOCUSES);
+  const [observations, setObservations] = useState<Observation[]>(SEED_OBSERVATIONS);
 
   // Quick Observation Drawer State
   const [observedPlayer, setObservedPlayer] = useState<Player | null>(null);
 
+  // 1. Listen to Firebase Auth state
   useEffect(() => {
-    StorageEngine.init();
-    setMatches(StorageEngine.getMatches());
+    const unsubscribeAuth = onAuthStateChanged(auth, user => {
+      setAuthUser(user);
+      if (!user) {
+        setCoachProfile(null);
+        setIsAuthLoading(false);
+      }
+    });
+    return () => unsubscribeAuth();
   }, []);
+
+  // 2. Subscribe to Coach Profile document when authUser is present
+  useEffect(() => {
+    if (!authUser) return;
+    setIsAuthLoading(true);
+
+    const unsubProfile = subscribeToCoachProfile(authUser.uid, profile => {
+      setCoachProfile(profile);
+      setIsAuthLoading(false);
+    });
+
+    // Seed default records if Firestore is completely empty upon first sign-in
+    seedDefaultFirestoreIfEmpty();
+
+    return () => unsubProfile();
+  }, [authUser]);
+
+  // 3. Subscribe to Firestore cloud data when signed in
+  useEffect(() => {
+    if (!authUser || !coachProfile) return;
+
+    const role = coachProfile.role;
+
+    const unsubTeam = CloudStorageEngine.subscribeToTeam(setTeam);
+    const unsubFacility = CloudStorageEngine.subscribeToFacility(setFacility);
+    const unsubPlayers = CloudStorageEngine.subscribeToPlayers(setPlayers);
+    const unsubActivities = CloudStorageEngine.subscribeToActivities(setActivities);
+    const unsubSession = CloudStorageEngine.subscribeToSession(setSession);
+    const unsubMatches = CloudStorageEngine.subscribeToMatches(setMatches);
+    const unsubFocuses = CloudStorageEngine.subscribeToDevelopmentFocuses(role, setFocuses);
+    const unsubObs = CloudStorageEngine.subscribeToObservations(role, setObservations);
+
+    return () => {
+      unsubTeam();
+      unsubFacility();
+      unsubPlayers();
+      unsubActivities();
+      unsubSession();
+      unsubMatches();
+      unsubFocuses();
+      unsubObs();
+    };
+  }, [authUser, coachProfile]);
 
   // Compute current active match for HomeView and default MatchView selection
   const activeMatch = useMemo<MatchRecord>(() => {
@@ -52,53 +116,50 @@ export function App() {
     return getActiveMatch(matches) || matches[0];
   }, [matches, selectedMatchId]);
 
-  // Save Handlers
+  // Save Handlers (Persisted to Firestore via CloudStorageEngine)
   const handleSaveObservation = (obsData: Omit<Observation, 'id' | 'timestamp'>) => {
     const newObs: Observation = {
       ...obsData,
       id: `obs-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      coachName: team.headCoachName
+      coachName: coachProfile?.displayName || team.headCoachName
     };
-    StorageEngine.addObservation(newObs);
-    setObservations(StorageEngine.getObservations());
+    CloudStorageEngine.addObservation(newObs);
   };
 
   const handleUpdateSession = (updatedSession: TrainingSession) => {
-    StorageEngine.saveSession(updatedSession);
-    setSession(updatedSession);
+    CloudStorageEngine.saveSession(updatedSession);
   };
 
   const handleAddMatch = (newMatch: MatchRecord) => {
-    StorageEngine.addMatch(newMatch);
-    const updated = StorageEngine.getMatches();
-    setMatches(updated);
+    CloudStorageEngine.addMatch(newMatch);
     setSelectedMatchId(newMatch.id);
   };
 
   const handleUpdateMatch = (updatedMatch: MatchRecord) => {
-    StorageEngine.updateMatch(updatedMatch);
-    setMatches(StorageEngine.getMatches());
+    CloudStorageEngine.updateMatch(updatedMatch);
   };
 
   const handleAddDevelopmentFocus = (focus: DevelopmentFocus) => {
-    StorageEngine.addDevelopmentFocus(focus);
-    setFocuses(StorageEngine.getDevelopmentFocuses());
+    CloudStorageEngine.addDevelopmentFocus(focus);
   };
 
   const handleUpdateDevelopmentFocusState = (focusId: string, newState: FocusState) => {
     const target = focuses.find(f => f.id === focusId);
     if (target) {
       const updated = { ...target, state: newState };
-      StorageEngine.updateDevelopmentFocus(updated);
-      setFocuses(StorageEngine.getDevelopmentFocuses());
+      CloudStorageEngine.updateDevelopmentFocus(updated);
     }
   };
 
   const handleAddPlayer = (newPlayer: Player) => {
-    StorageEngine.addPlayer(newPlayer);
-    setPlayers(StorageEngine.getPlayers());
+    CloudStorageEngine.addPlayer(newPlayer);
   };
+
+  const handleUpdatePlayer = (updatedPlayer: Player) => {
+    CloudStorageEngine.updatePlayer(updatedPlayer);
+  };
+
 
   const handleApplyMatchPrioritiesToSession = (priorities: string[]) => {
     const updated = {
@@ -138,15 +199,41 @@ export function App() {
     setActiveTab('home');
   };
 
-  // Route check for Public Captain Submission Page (/report/:token)
+  // Route check 1: Public Captain Submission Page (/report/:token) — No login required
   const pathname = window.location.pathname;
   if (pathname.startsWith('/report/')) {
     const token = pathname.replace('/report/', '').trim();
     return (
-      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Report Form...</div>}>
+      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Captain Report Form...</div>}>
         <PublicCaptainReportView token={token} />
       </Suspense>
     );
+  }
+
+  // Route check 2: Coach Invitation Page (/invite/:token) — Public registration with pre-approved token
+  if (pathname.startsWith('/invite/')) {
+    const token = pathname.replace('/invite/', '').trim();
+    return (
+      <AcceptInviteView
+        token={token}
+        onAccountCreated={() => {
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
+  // Auth Gate: Unauthenticated users are presented with LoginView
+  if (isAuthLoading) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+        Authenticating coach session...
+      </div>
+    );
+  }
+
+  if (!authUser || !coachProfile) {
+    return <LoginView />;
   }
 
   if (isLiveMode) {
@@ -178,6 +265,9 @@ export function App() {
       onSelectTab={setActiveTab}
       team={team}
       onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
+      currentCoach={coachProfile}
+      onOpenCoachManager={() => setIsCoachManagerOpen(true)}
+      onSignOut={logoutCoach}
     >
       {activeTab === 'home' && (
         <HomeView
@@ -214,12 +304,15 @@ export function App() {
           onAddDevelopmentFocus={handleAddDevelopmentFocus}
           onUpdateDevelopmentFocusState={handleUpdateDevelopmentFocusState}
           onAddPlayer={handleAddPlayer}
+          onUpdatePlayer={handleUpdatePlayer}
         />
+
       )}
 
       {activeTab === 'match' && (
         <MatchView
           matches={matches}
+          players={players}
           selectedMatchId={activeMatch?.id}
           onSelectMatch={setSelectedMatchId}
           onAddMatch={handleAddMatch}
@@ -247,9 +340,17 @@ export function App() {
           <FieldBoardModal onClose={() => setIsFieldBoardOpen(false)} />
         </Suspense>
       )}
+
+      {isCoachManagerOpen && coachProfile.role === 'head_coach' && (
+        <CoachManagerModal
+          currentCoach={coachProfile}
+          onClose={() => setIsCoachManagerOpen(false)}
+        />
+      )}
     </AppShell>
   );
 }
 
 export default App;
+
 
