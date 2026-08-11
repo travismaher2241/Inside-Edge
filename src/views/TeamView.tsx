@@ -1,7 +1,7 @@
 // Team Roster & Player Development View for Inside Edge (Supports FR-002 & FR-013)
 
 import React, { useState } from 'react';
-import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, TrainingSession } from '../types/cricket';
+import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, ClubTrainingSession } from '../types/cricket';
 import { getRoleBadgeLabel, getBowlingStyleLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
 import { ShieldAlert, Plus, X, Check } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
@@ -11,8 +11,8 @@ interface TeamViewProps {
   players: Player[];
   focuses: DevelopmentFocus[];
   observations: Observation[];
-  session?: TrainingSession;
-  onUpdateSession?: (session: TrainingSession) => void;
+  session?: ClubTrainingSession;
+  onUpdateSession?: (session: ClubTrainingSession) => void;
   onOpenQuickObservation: (player: Player) => void;
   onAddDevelopmentFocus: (focus: DevelopmentFocus) => void;
   onUpdateDevelopmentFocusState: (focusId: string, newState: FocusState) => void;
@@ -33,9 +33,12 @@ export const TeamView: React.FC<TeamViewProps> = ({
   onUpdatePlayer
 }) => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(players[0] || null);
+  const [detailTab, setDetailTab] = useState<'bowling' | 'focus' | 'observations'>('bowling');
 
   const [isAddFocusOpen, setIsAddFocusOpen] = useState<boolean>(false);
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [roleFilter, setRoleFilter] = useState<PrimaryRole | 'all'>('all');
 
   const [focusDomain, setFocusDomain] = useState<DevelopmentDomain>('Batting');
   const [focusStatement, setFocusStatement] = useState<string>('');
@@ -53,6 +56,16 @@ export const TeamView: React.FC<TeamViewProps> = ({
   const playerObservations = selectedPlayer
     ? observations.filter(o => o.playerId === selectedPlayer.id)
     : [];
+  const visiblePlayers = players.filter(player =>
+    (roleFilter === 'all' || player.primaryRole === roleFilter)
+    && (!searchQuery.trim() || `${player.name} ${player.preferredName || ''}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+  );
+
+  const isSelectedPlayerBowler = selectedPlayer?.bowlingStyle !== 'does_not_bowl';
+  const availableDetailTabs: readonly ('bowling' | 'focus' | 'observations')[] = isSelectedPlayerBowler
+    ? ['bowling', 'focus', 'observations']
+    : ['focus', 'observations'];
+  const activeDetailTab = availableDetailTabs.includes(detailTab) ? detailTab : availableDetailTabs[0];
 
   const handleCreateFocus = () => {
     if (!selectedPlayer || !focusStatement) return;
@@ -107,12 +120,17 @@ export const TeamView: React.FC<TeamViewProps> = ({
         </button>
       </div>
 
-      {/* Player Horizontal Scroll List */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {players.map(p => (
+      <div className="team-filters">
+        <label>Search roster<input type="search" placeholder="Search players" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} /></label>
+        <label>Primary role<select value={roleFilter} onChange={event => setRoleFilter(event.target.value as PrimaryRole | 'all')}><option value="all">All roles</option><option value="top_order_batter">Top-order batter</option><option value="middle_order_batter">Middle-order batter</option><option value="all_rounder">All-rounder</option><option value="pace_bowler">Pace bowler</option><option value="spin_bowler">Spin bowler</option><option value="wicketkeeper">Wicketkeeper</option></select></label>
+      </div>
+
+      <div className="team-workspace">
+      <div className="team-roster" aria-label="Player roster">
+        {visiblePlayers.map(p => (
           <button
             key={p.id}
-            onClick={() => setSelectedPlayer(p)}
+            onClick={() => { setSelectedPlayer(p); setDetailTab('bowling'); }}
             style={{
               minWidth: '100px',
               padding: '10px',
@@ -131,6 +149,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
             </div>
           </button>
         ))}
+        {visiblePlayers.length === 0 && <div className="card">No players match these filters.</div>}
       </div>
 
       {/* Selected Player Detail Card */}
@@ -153,7 +172,16 @@ export const TeamView: React.FC<TeamViewProps> = ({
                         : [...currentExpected, selectedPlayer.id];
                       onUpdateSession({
                         ...session,
-                        expectedPlayerIds: updatedExpected
+                        expectedPlayerIds: updatedExpected,
+                        confirmedAttendingPlayerIds: updatedExpected,
+                        availabilityRecords: {
+                          ...session.availabilityRecords,
+                          [selectedPlayer.id]: {
+                            ...session.availabilityRecords[selectedPlayer.id],
+                            playerId: selectedPlayer.id,
+                            status: isAvailable ? 'not_attending' : 'attending'
+                          }
+                        }
                       });
                     }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -179,96 +207,118 @@ export const TeamView: React.FC<TeamViewProps> = ({
             </div>
           )}
 
+          {/* Detail Section Tabs */}
+          <div className="card-section-tabs" role="tablist" aria-label="Player detail sections" style={{ marginTop: '16px' }}>
+            {availableDetailTabs.map(tab => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={activeDetailTab === tab}
+                onClick={() => setDetailTab(tab)}
+                className={activeDetailTab === tab ? 'active' : ''}
+              >
+                {tab === 'bowling' ? 'Bowling' : tab === 'focus' ? `Focus (${playerFocuses.length})` : `Observations (${playerObservations.length})`}
+              </button>
+            ))}
+          </div>
+
           {/* Bowling Tactical Profile Section */}
-          <BowlingProfileEditor
-            key={selectedPlayer.id}
-            player={selectedPlayer}
-            onSavePlayer={updated => {
-              StorageEngine.updatePlayer(updated);
-              setSelectedPlayer(updated);
-              if (onUpdatePlayer) onUpdatePlayer(updated);
-            }}
-          />
+          {activeDetailTab === 'bowling' && (
+            <BowlingProfileEditor
+              key={selectedPlayer.id}
+              player={selectedPlayer}
+              onSavePlayer={updated => {
+                StorageEngine.updatePlayer(updated);
+                setSelectedPlayer(updated);
+                if (onUpdatePlayer) onUpdatePlayer(updated);
+              }}
+            />
+          )}
 
           {/* Active Development Focus Section (FR-013) */}
-          <div style={{ marginTop: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>DEVELOPMENT FOCUSES</span>
-              <button
-                onClick={() => setIsAddFocusOpen(true)}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <Plus size={14} /> NEW FOCUS
-              </button>
-            </div>
-
-            {playerFocuses.length > 0 ? (
-              playerFocuses.map(f => (
-                <div key={f.id} style={{ background: 'var(--bg-surface-elevated)', padding: '12px', borderRadius: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="badge badge-gold">[{f.domain}]</span>
-                    {/* State Transition Selector */}
-                    <select
-                      value={f.state}
-                      onChange={e => onUpdateDevelopmentFocusState(f.id, e.target.value as FocusState)}
-                      style={{
-                        background: 'var(--bg-surface-card)',
-                        border: '1px solid var(--border-gold)',
-                        color: 'var(--accent-gold)',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: '4px'
-                      }}
-                    >
-                      {FOCUS_STATES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginTop: '6px' }}>{f.focusStatement}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Why: {f.why}</div>
-                </div>
-              ))
-            ) : (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
-                No active development focus set for {selectedPlayer.name}.
+          {activeDetailTab === 'focus' && (
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>DEVELOPMENT FOCUSES</span>
+                <button
+                  onClick={() => setIsAddFocusOpen(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={14} /> NEW FOCUS
+                </button>
               </div>
-            )}
-          </div>
+
+              {playerFocuses.length > 0 ? (
+                playerFocuses.map(f => (
+                  <div key={f.id} style={{ background: 'var(--bg-surface-elevated)', padding: '12px', borderRadius: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="badge badge-gold">[{f.domain}]</span>
+                      {/* State Transition Selector */}
+                      <select
+                        value={f.state}
+                        onChange={e => onUpdateDevelopmentFocusState(f.id, e.target.value as FocusState)}
+                        style={{
+                          background: 'var(--bg-surface-card)',
+                          border: '1px solid var(--border-gold)',
+                          color: 'var(--accent-gold)',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {FOCUS_STATES.map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', marginTop: '6px' }}>{f.focusStatement}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Why: {f.why}</div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+                  No active development focus set for {selectedPlayer.name}.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Player Observation History Timeline */}
-          <div style={{ marginTop: '16px' }}>
-            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '8px' }}>
-              OBSERVATION EVIDENCE TIMELINE ({playerObservations.length})
-            </div>
-
-            {playerObservations.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {playerObservations.map(obs => (
-                  <div key={obs.id} style={{ background: 'var(--bg-surface-card)', border: '1px solid var(--border-light)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
-                      <span className="badge badge-green">{obs.tag} ({obs.source.toUpperCase()})</span>
-                      <span>{new Date(obs.timestamp).toLocaleDateString()}</span>
-                    </div>
-                    <div style={{ marginTop: '4px', fontWeight: 600 }}>{obs.textNote}</div>
-                  </div>
-                ))}
+          {activeDetailTab === 'observations' && (
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '8px' }}>
+                OBSERVATION EVIDENCE TIMELINE ({playerObservations.length})
               </div>
-            ) : (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No observations recorded yet.</div>
-            )}
-          </div>
+
+              {playerObservations.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {playerObservations.map(obs => (
+                    <div key={obs.id} style={{ background: 'var(--bg-surface-card)', border: '1px solid var(--border-light)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
+                        <span className="badge badge-green">{obs.tag} ({obs.source.toUpperCase()})</span>
+                        <span>{new Date(obs.timestamp).toLocaleDateString()}</span>
+                      </div>
+                      <div style={{ marginTop: '4px', fontWeight: 600 }}>{obs.textNote}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No observations recorded yet.</div>
+              )}
+            </div>
+          )}
         </div>
       )}
+      </div>
 
       {/* Add Focus Modal */}
       {isAddFocusOpen && selectedPlayer && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddFocusOpen(false)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="focus-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Create Focus: {selectedPlayer.name}</div>
-              <button onClick={() => setIsAddFocusOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
+              <div id="focus-dialog-title" style={{ fontSize: '1.1rem', fontWeight: 800 }}>Create Focus: {selectedPlayer.name}</div>
+              <button aria-label="Close development focus dialog" onClick={() => setIsAddFocusOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
             </div>
 
             <div style={{ marginBottom: '10px' }}>
@@ -316,10 +366,10 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {/* Add Player Modal (FR-002) */}
       {isAddPlayerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddPlayerOpen(false)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-labelledby="add-player-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Add Squad Player</div>
-              <button onClick={() => setIsAddPlayerOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
+              <div id="add-player-dialog-title" style={{ fontSize: '1.1rem', fontWeight: 800 }}>Add Squad Player</div>
+              <button aria-label="Close add player dialog" onClick={() => setIsAddPlayerOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
             </div>
 
             <div style={{ marginBottom: '10px' }}>
