@@ -26,12 +26,22 @@ const LiveModeView = lazy(() => import('./views/LiveModeView').then(m => ({ defa
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const FieldBoardModal = lazy(() => import('./components/cricket/FieldBoardModal').then(m => ({ default: m.FieldBoardModal })));
 
+const TEST_ACCESS_COACH: CoachUser = {
+  uid: 'test-access',
+  email: 'tester@insideedge.local',
+  displayName: 'Tester (Test Access)',
+  role: 'head_coach',
+  createdAt: new Date().toISOString()
+};
+
 export function App() {
   // Auth & Coach State
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [coachProfile, setCoachProfile] = useState<CoachUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isCoachManagerOpen, setIsCoachManagerOpen] = useState<boolean>(false);
+  const [isTestMode, setIsTestMode] = useState<boolean>(false);
+  const effectiveCoachProfile = isTestMode ? TEST_ACCESS_COACH : coachProfile;
 
   // App Tab & View State
   const [activeTab, setActiveTab] = useState<TabType>('home');
@@ -82,7 +92,7 @@ export function App() {
 
   // 3. Subscribe to Firestore cloud data when signed in
   useEffect(() => {
-    if (!authUser || !coachProfile) return;
+    if (isTestMode || !authUser || !coachProfile) return;
 
     const role = coachProfile.role;
 
@@ -105,7 +115,7 @@ export function App() {
       unsubFocuses();
       unsubObs();
     };
-  }, [authUser, coachProfile]);
+  }, [authUser, coachProfile, isTestMode]);
 
   // Compute current active match for HomeView and default MatchView selection
   const activeMatch = useMemo<MatchRecord>(() => {
@@ -116,48 +126,80 @@ export function App() {
     return getActiveMatch(matches) || matches[0];
   }, [matches, selectedMatchId]);
 
-  // Save Handlers (Persisted to Firestore via CloudStorageEngine)
+  // Save Handlers (Persisted to Firestore via CloudStorageEngine, or kept local-only in Test Access mode)
   const handleSaveObservation = (obsData: Omit<Observation, 'id' | 'timestamp'>) => {
     const newObs: Observation = {
       ...obsData,
       id: `obs-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      coachName: coachProfile?.displayName || team.headCoachName
+      coachName: effectiveCoachProfile?.displayName || team.headCoachName
     };
-    CloudStorageEngine.addObservation(newObs);
+    if (isTestMode) {
+      setObservations(prev => [...prev, newObs]);
+    } else {
+      CloudStorageEngine.addObservation(newObs);
+    }
   };
 
   const handleUpdateSession = (updatedSession: TrainingSession) => {
-    CloudStorageEngine.saveSession(updatedSession);
+    if (isTestMode) {
+      setSession(updatedSession);
+    } else {
+      CloudStorageEngine.saveSession(updatedSession);
+    }
   };
 
   const handleAddMatch = (newMatch: MatchRecord) => {
-    CloudStorageEngine.addMatch(newMatch);
+    if (isTestMode) {
+      setMatches(prev => [...prev, newMatch]);
+    } else {
+      CloudStorageEngine.addMatch(newMatch);
+    }
     setSelectedMatchId(newMatch.id);
   };
 
   const handleUpdateMatch = (updatedMatch: MatchRecord) => {
-    CloudStorageEngine.updateMatch(updatedMatch);
+    if (isTestMode) {
+      setMatches(prev => prev.map(m => (m.id === updatedMatch.id ? updatedMatch : m)));
+    } else {
+      CloudStorageEngine.updateMatch(updatedMatch);
+    }
   };
 
   const handleAddDevelopmentFocus = (focus: DevelopmentFocus) => {
-    CloudStorageEngine.addDevelopmentFocus(focus);
+    if (isTestMode) {
+      setFocuses(prev => [...prev, focus]);
+    } else {
+      CloudStorageEngine.addDevelopmentFocus(focus);
+    }
   };
 
   const handleUpdateDevelopmentFocusState = (focusId: string, newState: FocusState) => {
     const target = focuses.find(f => f.id === focusId);
     if (target) {
       const updated = { ...target, state: newState };
-      CloudStorageEngine.updateDevelopmentFocus(updated);
+      if (isTestMode) {
+        setFocuses(prev => prev.map(f => (f.id === focusId ? updated : f)));
+      } else {
+        CloudStorageEngine.updateDevelopmentFocus(updated);
+      }
     }
   };
 
   const handleAddPlayer = (newPlayer: Player) => {
-    CloudStorageEngine.addPlayer(newPlayer);
+    if (isTestMode) {
+      setPlayers(prev => [...prev, newPlayer]);
+    } else {
+      CloudStorageEngine.addPlayer(newPlayer);
+    }
   };
 
   const handleUpdatePlayer = (updatedPlayer: Player) => {
-    CloudStorageEngine.updatePlayer(updatedPlayer);
+    if (isTestMode) {
+      setPlayers(prev => prev.map(p => (p.id === updatedPlayer.id ? updatedPlayer : p)));
+    } else {
+      CloudStorageEngine.updatePlayer(updatedPlayer);
+    }
   };
 
 
@@ -224,7 +266,7 @@ export function App() {
   }
 
   // Auth Gate: Unauthenticated users are presented with LoginView
-  if (isAuthLoading) {
+  if (isAuthLoading && !isTestMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
         Authenticating coach session...
@@ -232,8 +274,8 @@ export function App() {
     );
   }
 
-  if (!authUser || !coachProfile) {
-    return <LoginView />;
+  if (!isTestMode && (!authUser || !coachProfile)) {
+    return <LoginView onTestAccess={() => setIsTestMode(true)} />;
   }
 
   if (isLiveMode) {
@@ -259,15 +301,23 @@ export function App() {
     );
   }
 
+  const handleSignOut = () => {
+    if (isTestMode) {
+      setIsTestMode(false);
+    } else {
+      logoutCoach();
+    }
+  };
+
   return (
     <AppShell
       activeTab={activeTab}
       onSelectTab={setActiveTab}
       team={team}
       onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
-      currentCoach={coachProfile}
-      onOpenCoachManager={() => setIsCoachManagerOpen(true)}
-      onSignOut={logoutCoach}
+      currentCoach={effectiveCoachProfile}
+      onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
+      onSignOut={handleSignOut}
     >
       {activeTab === 'home' && (
         <HomeView
@@ -341,7 +391,7 @@ export function App() {
         </Suspense>
       )}
 
-      {isCoachManagerOpen && coachProfile.role === 'head_coach' && (
+      {isCoachManagerOpen && !isTestMode && coachProfile?.role === 'head_coach' && (
         <CoachManagerModal
           currentCoach={coachProfile}
           onClose={() => setIsCoachManagerOpen(false)}
