@@ -15,7 +15,6 @@ import {
   updateDoc,
   collection,
   query,
-  where,
   getDocs,
   onSnapshot
 } from 'firebase/firestore';
@@ -118,9 +117,8 @@ export async function createCoachInvite(role: CoachRole, creator: CoachUser): Pr
   }
 
   const token = generateInviteToken();
-  const inviteId = `inv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const invite: CoachInvite = {
-    id: inviteId,
+    id: token,
     token,
     role,
     createdByUid: creator.uid,
@@ -129,7 +127,10 @@ export async function createCoachInvite(role: CoachRole, creator: CoachUser): Pr
     used: false
   };
 
-  const inviteRef = doc(db, 'coachInvites', inviteId);
+  // The invite token doubles as the Firestore document ID so an unauthenticated
+  // invitee can look it up with a direct `get` (allowed by security rules)
+  // instead of a `where` query (classified as `list`, which requires a head coach).
+  const inviteRef = doc(db, 'coachInvites', token);
   await setDoc(inviteRef, invite);
   return invite;
 }
@@ -167,13 +168,11 @@ export async function getCoachesList(): Promise<CoachUser[]> {
  */
 export async function getInviteByToken(token: string): Promise<CoachInvite | null> {
   try {
-    const q = query(collection(db, 'coachInvites'), where('token', '==', token.trim()));
-    const snap = await getDocs(q);
-    if (snap.empty) {
+    const snap = await getDoc(doc(db, 'coachInvites', token.trim()));
+    if (!snap.exists()) {
       return null;
     }
-    const docData = snap.docs[0].data() as CoachInvite;
-    return docData;
+    return snap.data() as CoachInvite;
   } catch (err) {
     console.error('Error looking up invite by token:', err);
     return null;

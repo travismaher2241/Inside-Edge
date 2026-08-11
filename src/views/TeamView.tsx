@@ -181,6 +181,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
           {/* Bowling Tactical Profile Section */}
           <BowlingProfileEditor
+            key={selectedPlayer.id}
             player={selectedPlayer}
             onSavePlayer={updated => {
               StorageEngine.updatePlayer(updated);
