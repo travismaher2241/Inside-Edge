@@ -1,12 +1,13 @@
 // Interactive Cricket Field Setting Board Component (Draggable & Blank by Default per §17.1)
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { FieldPosition, BattingHand } from '../../types/cricket';
 import { X, Shield, Plus, Trash2 } from 'lucide-react';
 
 interface FieldBoardModalProps {
   onClose: () => void;
 }
+
 
 const PRESET_POSITIONS: Record<string, FieldPosition[]> = {
   'Standard 3-Slip Seam': [
@@ -58,6 +59,16 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const loadPreset = (presetName: string) => {
     setSelectedPreset(presetName);
@@ -114,10 +125,16 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({ onClose }) => 
             </div>
             <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>Field Setting Canvas</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <button
+            type="button"
+            aria-label="Close field board"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+          >
             <X size={24} />
           </button>
         </div>
+
 
         {/* Preset & Controls */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>

@@ -197,3 +197,52 @@ export function calculateUtilisation(
     warnings
   };
 }
+
+export function derivePlanRationale(
+  activeLanes: NetLane[],
+  baseContext: string = 'Last match review identified 3 early wickets driving against full seam and 4 missed catching opportunities.'
+): string {
+  if (!activeLanes || activeLanes.length === 0) {
+    return baseContext;
+  }
+
+  let cleanContext = baseContext.trim();
+  const matchIndex = cleanContext.indexOf('The plan allocates');
+  if (matchIndex !== -1) {
+    cleanContext = cleanContext.substring(0, matchIndex).trim();
+  }
+
+  const laneDescriptions = activeLanes.map(lane => {
+    const netNumberMatch = lane.name.match(/Net\s*\d+/i);
+    const netLabel = netNumberMatch ? netNumberMatch[0] : lane.name;
+
+    let shortObjective = lane.laneObjective ? lane.laneObjective.toLowerCase() : '';
+    if (shortObjective.includes('new-ball') || shortObjective.includes('leave') || shortObjective.includes('seam')) {
+      shortObjective = 'new-ball leave corridor';
+    } else if (shortObjective.includes('spin') || shortObjective.includes('footwork')) {
+      shortObjective = 'spin rotation';
+    } else if (shortObjective.includes('yorker') || shortObjective.includes('death')) {
+      shortObjective = 'death bowling';
+    } else if (shortObjective.includes('free net') || shortObjective.includes('technical')) {
+      shortObjective = 'free net technical repetition';
+    } else {
+      shortObjective = lane.laneObjective || 'practice';
+    }
+
+    return `${netLabel} to ${shortObjective}`;
+  });
+
+  let allocationText = '';
+  if (laneDescriptions.length === 1) {
+    allocationText = `The plan allocates ${laneDescriptions[0]}.`;
+  } else if (laneDescriptions.length === 2) {
+    allocationText = `The plan allocates ${laneDescriptions[0]}, and ${laneDescriptions[1]}.`;
+  } else {
+    const allButLast = laneDescriptions.slice(0, -1).join(', ');
+    const last = laneDescriptions[laneDescriptions.length - 1];
+    allocationText = `The plan allocates ${allButLast}, and ${last}.`;
+  }
+
+  return cleanContext ? `${cleanContext} ${allocationText}` : allocationText;
+}
+

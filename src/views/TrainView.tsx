@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import type { TrainingSession, Facility, Player, NetLane } from '../types/cricket';
 import { NetVisualizer } from '../components/cricket/NetVisualizer';
-import { SessionCreationModal } from '../components/cricket/SessionCreationModal';
-import { adjustNetCount, calculateUtilisation } from '../modules/cricket/rotationEngine';
+import { adjustNetCount, calculateUtilisation, derivePlanRationale } from '../modules/cricket/rotationEngine';
 import { Play, Clock, Layers, AlertTriangle, Lightbulb, Plus, X, Check } from 'lucide-react';
+
+const SessionCreationModal = lazy(() => import('../components/cricket/SessionCreationModal').then(m => ({ default: m.SessionCreationModal })));
+
 
 interface TrainViewProps {
   session: TrainingSession;
@@ -93,6 +95,10 @@ export const TrainView: React.FC<TrainViewProps> = ({
   };
 
   const utilisation = rotationPlan ? calculateUtilisation(rotationPlan, sessionScopedPlayers) : null;
+
+  const displayedRationale = useMemo(() => {
+    return derivePlanRationale(netLanes, session.rationale);
+  }, [netLanes, session.rationale]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -235,13 +241,13 @@ export const TrainView: React.FC<TrainViewProps> = ({
           )}
 
           {/* Why this plan? Rationale Panel */}
-          {session.rationale && (
+          {displayedRationale && (
             <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)', background: 'rgba(229, 169, 60, 0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>
                 <Lightbulb size={16} /> WHY THIS PLAN?
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '4px', lineHeight: 1.4 }}>
-                {session.rationale}
+                {displayedRationale}
               </div>
             </div>
           )}
@@ -295,14 +301,17 @@ export const TrainView: React.FC<TrainViewProps> = ({
 
       {/* Session Creation Wizard Modal */}
       {isCreationModalOpen && (
-        <SessionCreationModal
-          facility={facility}
-          players={players}
-          recentObjectives={session.primaryObjectives}
-          onClose={() => setIsCreationModalOpen(false)}
-          onSaveSession={onUpdateSession}
-        />
+        <Suspense fallback={null}>
+          <SessionCreationModal
+            facility={facility}
+            players={players}
+            recentObjectives={session.primaryObjectives}
+            onClose={() => setIsCreationModalOpen(false)}
+            onSaveSession={onUpdateSession}
+          />
+        </Suspense>
       )}
+
     </div>
   );
 };

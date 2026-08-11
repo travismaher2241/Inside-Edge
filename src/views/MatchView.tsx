@@ -1,11 +1,13 @@
 // Match Module & Match-to-Training Loop View for Inside Edge (FR-015, Blueprint §13)
 
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import type { MatchRecord, MatchObservation } from '../types/cricket';
-import { MatchCreationModal } from '../components/cricket/MatchCreationModal';
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
-import { WeeklyRoundupView } from './WeeklyRoundupView';
 import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy } from 'lucide-react';
+
+const WeeklyRoundupView = lazy(() => import('./WeeklyRoundupView').then(m => ({ default: m.WeeklyRoundupView })));
+const MatchCreationModal = lazy(() => import('../components/cricket/MatchCreationModal').then(m => ({ default: m.MatchCreationModal })));
+
 
 interface MatchViewProps {
   matches: MatchRecord[];
@@ -206,8 +208,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
       </div>
 
       {viewMode === 'roundup' ? (
-        <WeeklyRoundupView onApplyPrioritiesToSession={onApplyPrioritiesToSession} />
+        <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading Weekly Round-Up...</div>}>
+          <WeeklyRoundupView onApplyPrioritiesToSession={onApplyPrioritiesToSession} />
+        </Suspense>
       ) : (
+
         <>
           {/* Header & New Match Action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -554,11 +559,14 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
       {/* Match Creation Modal */}
       {isAddMatchOpen && (
-        <MatchCreationModal
-          onClose={() => setIsAddMatchOpen(false)}
-          onSaveMatch={handleCreateMatch}
-        />
+        <Suspense fallback={null}>
+          <MatchCreationModal
+            onClose={() => setIsAddMatchOpen(false)}
+            onSaveMatch={handleCreateMatch}
+          />
+        </Suspense>
       )}
+
         </>
       )}
     </div>

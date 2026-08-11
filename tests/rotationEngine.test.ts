@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateRotationPlan, adjustNetCount, calculateUtilisation } from '../src/modules/cricket/rotationEngine';
+import { generateRotationPlan, adjustNetCount, calculateUtilisation, derivePlanRationale } from '../src/modules/cricket/rotationEngine';
 import { SEED_PLAYERS, SEED_FACILITY } from '../src/modules/cricket/seedData';
 import type { NetLane, Player } from '../src/types/cricket';
 
@@ -87,4 +87,52 @@ describe('Rotation Engine & Net Manager', () => {
     expect(updatedMetrics.allocatedPlayersCount).toBe(15);
     expect(updatedPlan.lanes.some(l => l.batterPlayerIds.includes(SEED_PLAYERS[0].id))).toBe(false);
   });
+
+  describe('derivePlanRationale', () => {
+    const baseContext = 'Last match review identified 3 early wickets driving against full seam and 4 missed catching opportunities.';
+
+    it('derives accurate rationale for 2-net configuration without referencing inactive Net 3', () => {
+      const twoLanes = SEED_FACILITY.netLanes.slice(0, 2);
+      const rationale = derivePlanRationale(twoLanes, baseContext);
+
+      expect(rationale).toContain('Last match review identified 3 early wickets driving against full seam and 4 missed catching opportunities.');
+      expect(rationale).toContain('Net 1 to new-ball leave corridor');
+      expect(rationale).toContain('Net 2 to spin rotation');
+      expect(rationale).not.toContain('Net 3');
+      expect(rationale).not.toContain('death bowling');
+    });
+
+    it('derives accurate rationale for 3-net configuration referencing Net 1, Net 2, and Net 3', () => {
+      const threeLanes = SEED_FACILITY.netLanes;
+      const rationale = derivePlanRationale(threeLanes, baseContext);
+
+      expect(rationale).toContain('Last match review identified 3 early wickets driving against full seam and 4 missed catching opportunities.');
+      expect(rationale).toContain('Net 1 to new-ball leave corridor');
+      expect(rationale).toContain('Net 2 to spin rotation');
+      expect(rationale).toContain('Net 3 to death bowling');
+      expect(rationale).not.toContain('Net 4');
+    });
+
+    it('derives accurate rationale for 4-net configuration referencing all 4 active nets', () => {
+      const fourLanes: NetLane[] = [
+        ...SEED_FACILITY.netLanes,
+        {
+          id: 'lane-4',
+          name: 'Net 4 - Technical Free Net',
+          laneType: 'standard',
+          laneObjective: 'Free net technical repetition & side-arm',
+          maxBatters: 2,
+          maxBowlers: 3
+        }
+      ];
+      const rationale = derivePlanRationale(fourLanes, baseContext);
+
+      expect(rationale).toContain('Last match review identified 3 early wickets driving against full seam and 4 missed catching opportunities.');
+      expect(rationale).toContain('Net 1 to new-ball leave corridor');
+      expect(rationale).toContain('Net 2 to spin rotation');
+      expect(rationale).toContain('Net 3 to death bowling');
+      expect(rationale).toContain('Net 4 to free net technical repetition');
+    });
+  });
 });
+

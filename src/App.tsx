@@ -1,6 +1,6 @@
 // Inside Edge Main Application Component
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import './styles/designTokens.css';
 import { StorageEngine } from './storage/db';
 import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState } from './types/cricket';
@@ -12,10 +12,12 @@ import { TrainView } from './views/TrainView';
 import { TeamView } from './views/TeamView';
 import { MatchView } from './views/MatchView';
 import { LibraryView } from './views/LibraryView';
-import { LiveModeView } from './views/LiveModeView';
-import { PublicCaptainReportView } from './views/PublicCaptainReportView';
 import { QuickObservationDrawer } from './components/cricket/QuickObservationDrawer';
-import { FieldBoardModal } from './components/cricket/FieldBoardModal';
+
+const LiveModeView = lazy(() => import('./views/LiveModeView').then(m => ({ default: m.LiveModeView })));
+const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
+const FieldBoardModal = lazy(() => import('./components/cricket/FieldBoardModal').then(m => ({ default: m.FieldBoardModal })));
+
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
@@ -140,20 +142,26 @@ export function App() {
   const pathname = window.location.pathname;
   if (pathname.startsWith('/report/')) {
     const token = pathname.replace('/report/', '').trim();
-    return <PublicCaptainReportView token={token} />;
+    return (
+      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Report Form...</div>}>
+        <PublicCaptainReportView token={token} />
+      </Suspense>
+    );
   }
 
   if (isLiveMode) {
     return (
       <div className="app-container" style={{ padding: '16px' }}>
-        <LiveModeView
-          session={session}
-          players={players}
-          facility={facility}
-          onExitLive={() => setIsLiveMode(false)}
-          onOpenQuickObservation={p => setObservedPlayer(p)}
-          onCompleteSession={handleCompleteSession}
-        />
+        <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Live Mode...</div>}>
+          <LiveModeView
+            session={session}
+            players={players}
+            facility={facility}
+            onExitLive={() => setIsLiveMode(false)}
+            onOpenQuickObservation={p => setObservedPlayer(p)}
+            onCompleteSession={handleCompleteSession}
+          />
+        </Suspense>
         <QuickObservationDrawer
           player={observedPlayer}
           developmentFocuses={focuses}
@@ -235,10 +243,13 @@ export function App() {
       />
 
       {isFieldBoardOpen && (
-        <FieldBoardModal onClose={() => setIsFieldBoardOpen(false)} />
+        <Suspense fallback={null}>
+          <FieldBoardModal onClose={() => setIsFieldBoardOpen(false)} />
+        </Suspense>
       )}
     </AppShell>
   );
 }
 
 export default App;
+
