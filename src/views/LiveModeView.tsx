@@ -134,9 +134,11 @@ export const LiveModeView: React.FC<LiveModeViewProps> = ({
 
       {/* Touch Control Buttons */}
       <div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '6px' }}>
-          TAP ANY PLAYER CARD ABOVE FOR FAST OBS LOGGING (≤4S)
-        </div>
+        {isRotationBlock && rotationPlan && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '6px' }}>
+            TAP ANY PLAYER CARD ABOVE FOR FAST OBS LOGGING (≤4S)
+          </div>
+        )}
         <div className="live-action-grid">
           <button
             className="btn btn-secondary live-action-btn"
