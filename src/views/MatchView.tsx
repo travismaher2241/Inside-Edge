@@ -2,8 +2,9 @@ import React, { useState, lazy, Suspense } from 'react';
 import type { MatchRecord, MatchObservation, Player, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan } from '../types/cricket';
 import type { TacticalContext, FieldSpot, BowlingPlan } from '../modules/cricket/tactics/types';
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
+import { getMatchWorkflowStatus } from '../modules/cricket/matchWorkflow';
 import { StorageEngine } from '../storage/db';
-import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target, FileText } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target } from 'lucide-react';
 
 import { MatchSquadSelector } from '../components/cricket/tactics/MatchSquadSelector';
 import { OppositionBatterManager } from '../components/cricket/tactics/OppositionBatterManager';
@@ -36,8 +37,9 @@ export const MatchView: React.FC<MatchViewProps> = ({
   const [viewMode, setViewMode] = useState<'fixtures' | 'roundup'>('fixtures');
   const currentMatch = matches.find(m => m.id === selectedMatchId) || matches[0];
 
-  const [activeTab, setActiveTab] = useState<'post' | 'pre'>('post');
+  const [activeSection, setActiveSection] = useState<'overview' | 'plan' | 'review'>('overview');
   const [isAddMatchOpen, setIsAddMatchOpen] = useState<boolean>(false);
+  const [isPrepWizardOpen, setIsPrepWizardOpen] = useState<boolean>(false);
 
   // Observation Form State
   const [isAddObservationOpen, setIsAddObservationOpen] = useState<boolean>(false);
@@ -56,7 +58,6 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
 
   // Pre-Match Opposition Tactical Planning State
-  const [preMatchSubTab, setPreMatchSubTab] = useState<'opposition' | 'strategy'>('opposition');
   const [tacticalStage, setTacticalStage] = useState<1 | 2 | 3 | 4>(1);
 
   // Scoped Data State for Current Match
@@ -72,7 +73,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
     format: currentMatch?.format === 'Two Day' ? 'multi_day' : currentMatch?.format === 'T20' ? 't20' : 'one_day',
     phase: 'new_ball',
     maxFieldersOutsideCircle: 2,
-    localRulesConfirmed: true,
+    localRulesConfirmed: false,
     isJunior: currentMatch?.format === 'Junior 20 Overs',
   });
 
@@ -95,6 +96,14 @@ export const MatchView: React.FC<MatchViewProps> = ({
     setMatchSquad(StorageEngine.getMatchSquad(matchId));
     setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
     setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+    setTacticalContext(previous => ({
+      ...previous,
+      format: target?.format === 'Two Day' ? 'multi_day' : target?.format === 'T20' ? 't20' : 'one_day',
+      localRulesConfirmed: false,
+      isJunior: target?.format === 'Junior 20 Overs'
+    }));
+    setTacticalStage(1);
+    setIsPrepWizardOpen(false);
   };
 
   // A newly created match isn't in the `matches` prop yet (parent state update is
@@ -201,6 +210,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
   }
 
   const isReviewed = Boolean(currentMatch.postMatchReview && currentMatch.postMatchReview.observations.length > 0);
+  const workflowStatus = getMatchWorkflowStatus(matchSquad, oppositionBatters, tacticalContext.localRulesConfirmed, selectedRulesProfileId, savedTacticalPlans);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -314,44 +324,62 @@ export const MatchView: React.FC<MatchViewProps> = ({
         </div>
       </div>
 
-      {/* Tab Switcher: Post-Match Review vs Pre-Match Plan */}
-      <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '10px', padding: '4px' }}>
-        <button
-          onClick={() => setActiveTab('post')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'post' ? 'var(--primary-green)' : 'transparent',
-            color: activeTab === 'post' ? '#fff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            cursor: 'pointer'
-          }}
-        >
-          POST-MATCH REVIEW ({currentMatch.postMatchReview?.observations.length || 0})
-        </button>
-        <button
-          onClick={() => setActiveTab('pre')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'pre' ? 'var(--primary-green)' : 'transparent',
-            color: activeTab === 'pre' ? '#fff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            cursor: 'pointer'
-          }}
-        >
-          PRE-MATCH PLAN
-        </button>
+      <div className="match-section-tabs" role="tablist" aria-label="Match sections">
+        {([
+          ['overview', 'Overview'],
+          ['plan', 'Plan'],
+          ['review', `Review ${currentMatch.postMatchReview?.observations.length || 0}`]
+        ] as const).map(([section, label]) => (
+          <button
+            key={section}
+            role="tab"
+            aria-selected={activeSection === section}
+            onClick={() => setActiveSection(section)}
+            className={activeSection === section ? 'active' : ''}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
+      {activeSection === 'overview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="card">
+            <div className="card-title">
+              <span>Match preparation</span>
+              <button className="btn btn-secondary" onClick={() => setIsPrepWizardOpen(true)} style={{ width: 'auto', padding: '0 12px', height: '32px', fontSize: '0.75rem' }}>
+                Open match prep {workflowStatus.completedCount}/4 <ArrowRight size={14} />
+              </button>
+            </div>
+            <div className="match-progress-grid">
+              {([
+                ['Squad selected', workflowStatus.squad, 1],
+                ['Opponents entered', workflowStatus.opposition, 2],
+                ['Conditions confirmed', workflowStatus.conditions, 3],
+                ['Plans generated', workflowStatus.plans, 4]
+              ] as const).map(([label, complete, stage]) => (
+                <button key={label} className="match-progress-card" onClick={() => { setTacticalStage(stage); setIsPrepWizardOpen(true); }}>
+                  {complete ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                  <span>{label}</span>
+                  <strong>{complete ? 'Complete' : 'Needs attention'}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">At a glance</div>
+            <div className="match-overview-grid">
+              <div><span>Fixture</span><strong>{currentMatch.date} · {currentMatch.venue}</strong></div>
+              <div><span>Format</span><strong>{currentMatch.format}</strong></div>
+              <div><span>Team objectives</span><strong>{currentMatch.preMatchPlan.teamObjectives.length}</strong></div>
+              <div><span>Review</span><strong>{isReviewed ? 'Started' : 'Not started'}</strong></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Post Match Review Tab */}
-      {activeTab === 'post' && (
+      {activeSection === 'review' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* Match Result Input Bar */}
           <div className="card" style={{ padding: '12px' }}>
@@ -432,7 +460,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
             <div className="card" style={{ border: '1px solid var(--border-gold)', background: 'var(--bg-surface-elevated)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>NEW MATCH OBSERVATION</span>
-                <button onClick={() => setIsAddObservationOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <button aria-label="Close observation form" onClick={() => setIsAddObservationOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   <X size={16} />
                 </button>
               </div>
@@ -504,6 +532,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
                     <span style={{ fontWeight: 700 }}>{priority}</span>
                   </div>
                   <button
+                    aria-label={`Remove priority ${priority}`}
                     onClick={() => handleRemovePriority(i)}
                     style={{ background: 'none', border: 'none', color: '#f97316', cursor: 'pointer', padding: '2px' }}
                   >
@@ -557,191 +586,157 @@ export const MatchView: React.FC<MatchViewProps> = ({
         </div>
       )}
 
-      {/* Pre-Match Plan Tab */}
-      {activeTab === 'pre' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Sub-tab Switcher: Opposition Plans vs Tactical Strategy */}
-          <div style={{ display: 'flex', background: 'var(--bg-surface-card)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border-light)' }}>
-            <button
-              onClick={() => setPreMatchSubTab('opposition')}
-              style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '6px',
-                border: 'none',
-                background: preMatchSubTab === 'opposition' ? 'var(--accent-gold-soft)' : 'transparent',
-                color: preMatchSubTab === 'opposition' ? 'var(--accent-gold)' : 'var(--text-secondary)',
-                fontWeight: 700,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <Target size={14} /> OPPOSITION PLANS (4-STAGE WORKFLOW)
-            </button>
-            <button
-              onClick={() => setPreMatchSubTab('strategy')}
-              style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '6px',
-                border: 'none',
-                background: preMatchSubTab === 'strategy' ? 'var(--accent-gold-soft)' : 'transparent',
-                color: preMatchSubTab === 'strategy' ? 'var(--accent-gold)' : 'var(--text-secondary)',
-                fontWeight: 700,
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <FileText size={14} /> TEAM STRATEGY SUMMARY
-            </button>
+      {/* Pre-Match Plan section */}
+      {activeSection === 'plan' && (
+        <div className="card">
+          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>PRE-MATCH STRATEGY PLAN</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>v {currentMatch.opponent}</span>
           </div>
-
-          {preMatchSubTab === 'opposition' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* 4-Stage Navigation Header */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px' }}>
-                {[
-                  { stage: 1, label: '1. Selected XI', icon: Users },
-                  { stage: 2, label: '2. Opposition', icon: User },
-                  { stage: 3, label: '3. Conditions', icon: Shield },
-                  { stage: 4, label: '4. Bowling Plans', icon: Target },
-                ].map(({ stage, label, icon: Icon }) => {
-                  const isActive = tacticalStage === stage;
-                  return (
-                    <button
-                      key={stage}
-                      onClick={() => setTacticalStage(stage as any)}
-                      style={{
-                        padding: '8px 4px',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: isActive ? 'var(--primary-green)' : 'transparent',
-                        color: isActive ? '#fff' : 'var(--text-secondary)',
-                        fontWeight: 700,
-                        fontSize: '0.72rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      <Icon size={14} />
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Stage Components Render */}
-              {tacticalStage === 1 && (
-                <MatchSquadSelector
-                  matchId={matchId}
-                  players={players}
-                  savedSquad={matchSquad}
-                  onSaveSquad={squadData => {
-                    StorageEngine.saveMatchSquad(squadData);
-                    setMatchSquad(squadData);
-                    setTacticalStage(2);
-                  }}
-                />
-              )}
-
-              {tacticalStage === 2 && (
-                <OppositionBatterManager
-                  matchId={matchId}
-                  batters={oppositionBatters}
-                  onSaveBatter={batterData => {
-                    StorageEngine.saveOppositionBatter(batterData);
-                    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
-                  }}
-                  onDeleteBatter={id => {
-                    StorageEngine.deleteOppositionBatter(id);
-                    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
-                  }}
-                />
-              )}
-
-              {tacticalStage === 3 && (
-                <RulesProfileSelector
-                  profiles={rulesProfiles}
-                  selectedProfileId={selectedRulesProfileId}
-                  onSelectProfileId={setSelectedRulesProfileId}
-                  context={tacticalContext}
-                  onUpdateContext={setTacticalContext}
-                />
-              )}
-
-              {tacticalStage === 4 && (
-                <BowlingPlanGenerator
-                  matchId={matchId}
-                  selectedXI={players.filter(p => matchSquad?.selectedPlayerIds.includes(p.id) || matchSquad === undefined)}
-                  batters={oppositionBatters}
-                  context={tacticalContext}
-                  savedPlans={savedTacticalPlans}
-                  onSavePlan={planData => {
-                    StorageEngine.saveTacticalPlan(planData);
-                    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
-                  }}
-                  onOpenFieldBoard={(bowler, plan, positions) => {
-                    setFieldBoardModalData({
-                      isOpen: true,
-                      bowler,
-                      plan,
-                      positions,
-                    });
-                  }}
-                />
-              )}
+          <div style={{ marginTop: '12px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Team Objectives</div>
+              <ul style={{ paddingLeft: '16px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
+                  <li key={i}>{obj}</li>
+                ))}
+              </ul>
             </div>
-          ) : (
-            <div className="card">
-              <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>PRE-MATCH STRATEGY PLAN</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>v {currentMatch.opponent}</span>
-              </div>
-              <div style={{ marginTop: '12px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Team Objectives</div>
-                  <ul style={{ paddingLeft: '16px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
-                      <li key={i}>{obj}</li>
-                    ))}
-                  </ul>
-                </div>
 
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Batting Strategy</div>
-                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                    {currentMatch.preMatchPlan.battingNotes}
-                  </p>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Bowling Strategy</div>
-                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                    {currentMatch.preMatchPlan.bowlingNotes}
-                  </p>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Fielding Focus</div>
-                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                    {currentMatch.preMatchPlan.fieldingFocus}
-                  </p>
-                </div>
-              </div>
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Batting Strategy</div>
+              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                {currentMatch.preMatchPlan.battingNotes}
+              </p>
             </div>
-          )}
+
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Bowling Strategy</div>
+              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                {currentMatch.preMatchPlan.bowlingNotes}
+              </p>
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Fielding Focus</div>
+              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                {currentMatch.preMatchPlan.fieldingFocus}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Match Prep Wizard — its own overlay, not a tab nested inside the section tabs */}
+      {isPrepWizardOpen && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsPrepWizardOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="match-prep-wizard-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH PREPARATION</div>
+                <h2 id="match-prep-wizard-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>v {currentMatch.opponent} — {workflowStatus.completedCount}/4 stages complete</h2>
+              </div>
+              <button aria-label="Close match prep" onClick={() => setIsPrepWizardOpen(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px', marginBottom: '16px' }}>
+              {[
+                { stage: 1, label: '1. Selected XI', icon: Users },
+                { stage: 2, label: '2. Opposition', icon: User },
+                { stage: 3, label: '3. Conditions', icon: Shield },
+                { stage: 4, label: '4. Bowling Plans', icon: Target },
+              ].map(({ stage, label, icon: Icon }) => {
+                const isActive = tacticalStage === stage;
+                const complete = [workflowStatus.squad, workflowStatus.opposition, workflowStatus.conditions, workflowStatus.plans][stage - 1];
+                return (
+                  <button
+                    key={stage}
+                    onClick={() => setTacticalStage(stage as 1 | 2 | 3 | 4)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: isActive ? 'var(--primary-green)' : 'transparent',
+                      color: isActive ? '#fff' : 'var(--text-secondary)',
+                      fontWeight: 700,
+                      fontSize: '0.72rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <Icon size={14} />
+                    <span>{complete ? '✓ ' : ''}{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {tacticalStage === 1 && (
+              <MatchSquadSelector
+                matchId={matchId}
+                players={players}
+                savedSquad={matchSquad}
+                onSaveSquad={squadData => {
+                  StorageEngine.saveMatchSquad(squadData);
+                  setMatchSquad(squadData);
+                  setTacticalStage(2);
+                }}
+              />
+            )}
+
+            {tacticalStage === 2 && (
+              <OppositionBatterManager
+                matchId={matchId}
+                batters={oppositionBatters}
+                onSaveBatter={batterData => {
+                  StorageEngine.saveOppositionBatter(batterData);
+                  setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                }}
+                onDeleteBatter={id => {
+                  StorageEngine.deleteOppositionBatter(id);
+                  setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                }}
+              />
+            )}
+
+            {tacticalStage === 3 && (
+              <RulesProfileSelector
+                profiles={rulesProfiles}
+                selectedProfileId={selectedRulesProfileId}
+                onSelectProfileId={setSelectedRulesProfileId}
+                context={tacticalContext}
+                onUpdateContext={setTacticalContext}
+              />
+            )}
+
+            {tacticalStage === 4 && (
+              <BowlingPlanGenerator
+                matchId={matchId}
+                selectedXI={players.filter(p => matchSquad?.selectedPlayerIds.includes(p.id) || matchSquad === undefined)}
+                batters={oppositionBatters}
+                context={tacticalContext}
+                savedPlans={savedTacticalPlans}
+                onSavePlan={planData => {
+                  StorageEngine.saveTacticalPlan(planData);
+                  setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                }}
+                onOpenFieldBoard={(bowler, plan, positions) => {
+                  setFieldBoardModalData({
+                    isOpen: true,
+                    bowler,
+                    plan,
+                    positions,
+                  });
+                }}
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -791,4 +786,3 @@ export const MatchView: React.FC<MatchViewProps> = ({
     </div>
   );
 };
-
