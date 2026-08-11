@@ -165,7 +165,7 @@ export const CentreWicketScenarioBuilder: React.FC<CentreWicketScenarioBuilderPr
               onChange={e => setBatter1Id(e.target.value)}
               style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-elevated)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px' }}
             >
-              {attendingPlayers.map(p => (
+              {attendingPlayers.filter(p => p.id !== batter2Id).map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
@@ -177,7 +177,7 @@ export const CentreWicketScenarioBuilder: React.FC<CentreWicketScenarioBuilderPr
               onChange={e => setBatter2Id(e.target.value)}
               style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-elevated)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px' }}
             >
-              {attendingPlayers.map(p => (
+              {attendingPlayers.filter(p => p.id !== batter1Id).map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>

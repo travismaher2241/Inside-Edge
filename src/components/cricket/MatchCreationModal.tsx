@@ -263,6 +263,12 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
                     type="text"
                     value={newObjText}
                     onChange={e => setNewObjText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddObjective();
+                      }
+                    }}
                     placeholder="Add team objective..."
                     style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-card)', color: '#fff', fontSize: '0.8rem' }}
                   />
