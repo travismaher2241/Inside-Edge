@@ -9,7 +9,12 @@ service cloud.firestore {
     }
 
     match /teams/{teamId} {
-      allow read, write: if true;
+      // Reads are open (needed for the public captain link to look up a team by token,
+      // and for the coach app's team list). Only creation is open — there is no coach
+      // auth in this app yet, so update/delete must stay closed or any visitor could
+      // rewrite or delete a team's submissionToken and hijack/destroy its captain link.
+      allow read, create: if true;
+      allow update, delete: if false;
     }
 
     match /matchReports/{reportId} {
