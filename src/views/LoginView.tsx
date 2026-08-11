@@ -4,9 +4,6 @@ import React, { useState } from 'react';
 import { loginWithEmailAndPassword, sendPasswordResetEmail } from '../modules/cricket/authService';
 import { Shield, Key, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2, FlaskConical } from 'lucide-react';
 
-export const TEST_ACCESS_USERNAME = 'Tester';
-export const TEST_ACCESS_PASSWORD = 'Test';
-
 interface LoginViewProps {
   onSuccess?: () => void;
   onTestAccess?: () => void;
@@ -17,12 +14,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
   const [password, setPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Test Access modal state
-  const [isTestAccessOpen, setIsTestAccessOpen] = useState<boolean>(false);
-  const [testUsername, setTestUsername] = useState<string>('');
-  const [testPassword, setTestPassword] = useState<string>('');
-  const [testErrorMessage, setTestErrorMessage] = useState<string | null>(null);
 
   // Forgot password modal state
   const [isResetOpen, setIsResetOpen] = useState<boolean>(false);
@@ -47,16 +38,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
       setErrorMessage(err.message || 'Failed to sign in. Please verify your credentials.');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleTestAccessSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (testUsername.trim() === TEST_ACCESS_USERNAME && testPassword === TEST_ACCESS_PASSWORD) {
-      setTestErrorMessage(null);
-      if (onTestAccess) onTestAccess();
-    } else {
-      setTestErrorMessage('Invalid test credentials.');
     }
   };
 
@@ -223,14 +204,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
           Need an account? Ask your club Head Coach for an invite link.
         </div>
 
-        {/* Test Access */}
+        {/* Test Access (temporary, pre-launch) */}
         <div style={{ textAlign: 'center', marginTop: '12px' }}>
           <button
             type="button"
-            onClick={() => {
-              setTestErrorMessage(null);
-              setIsTestAccessOpen(true);
-            }}
+            onClick={() => onTestAccess && onTestAccess()}
             style={{
               background: 'none',
               border: 'none',
@@ -243,7 +221,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
               gap: '6px'
             }}
           >
-            <FlaskConical size={14} /> Test Access
+            <FlaskConical size={14} /> Tester
           </button>
         </div>
       </div>
@@ -294,64 +272,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
                 </div>
               </form>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Test Access Modal */}
-      {isTestAccessOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setIsTestAccessOpen(false)}>
-          <div className="bottom-sheet-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FlaskConical size={18} color="var(--accent-gold)" /> Test Access
-              </div>
-              <button type="button" onClick={() => setIsTestAccessOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                ✕
-              </button>
-            </div>
-
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.4 }}>
-              Explore the app with sample data. Nothing entered here is saved to your club's cloud data.
-            </div>
-
-            <form onSubmit={handleTestAccessSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {testErrorMessage && (
-                <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', borderRadius: '8px', padding: '10px', color: '#ef4444', fontSize: '0.8rem' }}>
-                  {testErrorMessage}
-                </div>
-              )}
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>USERNAME</label>
-                <input
-                  type="text"
-                  required
-                  value={testUsername}
-                  onChange={e => setTestUsername(e.target.value)}
-                  placeholder="Tester"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-light)', color: 'var(--text-main)', marginTop: '4px', fontSize: '0.85rem' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PASSWORD</label>
-                <input
-                  type="password"
-                  required
-                  value={testPassword}
-                  onChange={e => setTestPassword(e.target.value)}
-                  placeholder="••••"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-light)', color: 'var(--text-main)', marginTop: '4px', fontSize: '0.85rem' }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsTestAccessOpen(false)} style={{ flex: 1 }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-gold" style={{ flex: 1 }}>
-                  Enter
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
