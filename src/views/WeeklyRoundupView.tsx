@@ -10,7 +10,7 @@ import {
 import { ClubTeamManager } from '../components/cricket/ClubTeamManager';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { FirebaseNotConfiguredBanner } from '../components/cricket/FirebaseNotConfiguredBanner';
-import { Calendar, Filter, Zap, CheckSquare, Square, FileText, AlertCircle, RefreshCw } from 'lucide-react';
+import { Calendar, Filter, Zap, CheckSquare, Square, FileText, AlertCircle, RefreshCw, Users } from 'lucide-react';
 
 interface WeeklyRoundupViewProps {
   onApplyPrioritiesToSession: (priorities: string[]) => void;
@@ -21,6 +21,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const [allReports, setAllReports] = useState<MatchReport[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [daysLimit, setDaysLimit] = useState<number>(7);
+  const [isTeamManagerOpen, setIsTeamManagerOpen] = useState<boolean>(false);
 
   // Selected recurring issues to apply to session
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
@@ -316,8 +317,46 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
         )}
       </div>
 
-      {/* Club Teams Management Section */}
-      <ClubTeamManager />
+      {/* Club Teams Management Entry Point */}
+      <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Users style={{ width: '18px', height: '18px', color: 'var(--accent-gold)' }} />
+            Club Teams & Captain Links
+          </h2>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            Manage club teams and share public submission links with captains.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setIsTeamManagerOpen(true)}
+          style={{ width: 'auto', minHeight: '38px', padding: '0 14px', fontSize: '0.85rem' }}
+        >
+          Manage teams ({teams.length})
+        </button>
+      </div>
+
+      {isTeamManagerOpen && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsTeamManagerOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Club teams and captain links management"
+            className="bottom-sheet-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '720px', maxHeight: '92vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <button aria-label="Close club team manager" onClick={() => setIsTeamManagerOpen(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
+                ✕
+              </button>
+            </div>
+            <ClubTeamManager />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
