@@ -113,7 +113,7 @@ export const FairnessReviewPanel: React.FC<FairnessReviewPanelProps> = ({
               {rollingLedger.map(l => {
                 const p = getPlayer(l.playerId);
                 if (!p) return null;
-                const credit = l.accumulatedFairnessCreditMinutes;
+                const credit = Math.round(l.accumulatedFairnessCreditMinutes * 10) / 10;
                 return (
                   <tr key={l.playerId} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                     <td style={{ padding: '8px', fontWeight: 700 }}>{p.name}</td>

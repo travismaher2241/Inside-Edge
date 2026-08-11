@@ -61,6 +61,7 @@ export const AppShell: React.FC<AppShellProps> = ({
               {currentCoach.role === 'head_coach' && onOpenCoachManager && (
                 <button
                   type="button"
+                  aria-label="Sign out"
                   onClick={onOpenCoachManager}
                   style={{
                     background: 'var(--accent-gold-soft)',
@@ -120,6 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <button
           className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}
           onClick={() => onSelectTab('home')}
+          aria-current={activeTab === 'home' ? 'page' : undefined}
         >
           <Home />
           <span>Home</span>
@@ -128,6 +130,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <button
           className={`nav-item ${activeTab === 'train' ? 'active' : ''}`}
           onClick={() => onSelectTab('train')}
+          aria-current={activeTab === 'train' ? 'page' : undefined}
         >
           <Dumbbell />
           <span>Train</span>
@@ -136,6 +139,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <button
           className={`nav-item ${activeTab === 'team' ? 'active' : ''}`}
           onClick={() => onSelectTab('team')}
+          aria-current={activeTab === 'team' ? 'page' : undefined}
         >
           <Users />
           <span>Team</span>
@@ -144,6 +148,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <button
           className={`nav-item ${activeTab === 'match' ? 'active' : ''}`}
           onClick={() => onSelectTab('match')}
+          aria-current={activeTab === 'match' ? 'page' : undefined}
         >
           <Trophy />
           <span>Match</span>
@@ -152,6 +157,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <button
           className={`nav-item ${activeTab === 'library' ? 'active' : ''}`}
           onClick={() => onSelectTab('library')}
+          aria-current={activeTab === 'library' ? 'page' : undefined}
         >
           <BookOpen />
           <span>Library</span>

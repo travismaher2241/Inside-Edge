@@ -8,7 +8,7 @@ import {
   type CoachProfileLoadError
 } from './modules/cricket/authService';
 import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from './types/cricket';
+import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
@@ -22,9 +22,10 @@ import { AcceptInviteView } from './views/AcceptInviteView';
 import { CoachManagerModal } from './components/cricket/CoachManagerModal';
 import { QuickObservationDrawer } from './components/cricket/QuickObservationDrawer';
 import { FieldBoardModal } from './components/cricket/FieldBoardModal';
-import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
-
-const LiveModeView = lazy(() => import('./views/LiveModeView').then(m => ({ default: m.LiveModeView })));
+import { LiveClubSession } from './components/cricket/planner/LiveClubSession';
+import { activityToClubBlock, selectCurrentClubSession } from './modules/cricket/sessionModel';
+import { completeSessionWithFairness } from './modules/cricket/clubRotationEngine';
+import { SEED_TEAM, SEED_PLAYERS, SEED_ACTIVITIES, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 
 const TEST_ACCESS_COACH: CoachUser = {
@@ -52,10 +53,8 @@ export function App() {
 
   // Firestore Real-Time Squad Data State
   const [team, setTeam] = useState<Team>(SEED_TEAM);
-  const [facility, setFacility] = useState<Facility>(SEED_FACILITY);
   const [players, setPlayers] = useState<Player[]>(SEED_PLAYERS);
   const [activities, setActivities] = useState<Activity[]>(SEED_ACTIVITIES);
-  const [session, setSession] = useState<TrainingSession>(SEED_SESSION);
   const [matches, setMatches] = useState<MatchRecord[]>([SEED_MATCH_RECORD]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | undefined>(undefined);
   const [focuses, setFocuses] = useState<DevelopmentFocus[]>(SEED_DEVELOPMENT_FOCUSES);
@@ -63,8 +62,10 @@ export function App() {
   const [clubTeams, setClubTeams] = useState<ClubTeam[]>(SEED_CLUB_TEAMS);
   const [trainingResources, setTrainingResources] = useState<TrainingResource[]>(SEED_TRAINING_RESOURCES);
   const [clubSessions, setClubSessions] = useState<ClubTrainingSession[]>([]);
+  const [currentClubSessionId, setCurrentClubSessionId] = useState<string | undefined>();
   const [fairnessLedger, setFairnessLedger] = useState<RollingFairnessLedger[]>(SEED_FAIRNESS_LEDGER);
   const [savedClubTemplates, setSavedClubTemplates] = useState<SavedClubTemplate[]>(SEED_SAVED_TEMPLATES);
+  const [savedFieldSettings, setSavedFieldSettings] = useState<SavedFieldSetting[]>([]);
 
   // Quick Observation Drawer State
   const [observedPlayer, setObservedPlayer] = useState<Player | null>(null);
@@ -106,25 +107,25 @@ export function App() {
     const role = coachProfile.role;
 
     const unsubTeam = CloudStorageEngine.subscribeToTeam(setTeam);
-    const unsubFacility = CloudStorageEngine.subscribeToFacility(setFacility);
     const unsubPlayers = CloudStorageEngine.subscribeToPlayers(setPlayers);
     const unsubActivities = CloudStorageEngine.subscribeToActivities(setActivities);
-    const unsubSession = CloudStorageEngine.subscribeToSession(setSession);
     const unsubMatches = CloudStorageEngine.subscribeToMatches(setMatches);
     const unsubFocuses = CloudStorageEngine.subscribeToDevelopmentFocuses(role, setFocuses);
     const unsubObs = CloudStorageEngine.subscribeToObservations(role, setObservations);
     const unsubClubTeams = CloudStorageEngine.subscribeToClubTeams(setClubTeams);
     const unsubResources = CloudStorageEngine.subscribeToTrainingResources(setTrainingResources);
-    const unsubClubSessions = CloudStorageEngine.subscribeToClubSessions(setClubSessions);
+    const unsubClubSessions = CloudStorageEngine.subscribeToClubSessions(sessions => {
+      setClubSessions(sessions);
+      setCurrentClubSessionId(current => current && sessions.some(session => session.id === current && session.status !== 'completed') ? current : sessions.find(session => session.status !== 'completed')?.id);
+    });
     const unsubFairness = CloudStorageEngine.subscribeToFairnessLedger(setFairnessLedger);
     const unsubTemplates = CloudStorageEngine.subscribeToSavedClubTemplates(setSavedClubTemplates);
+    const unsubFieldSettings = CloudStorageEngine.subscribeToSavedFieldSettings(setSavedFieldSettings);
 
     return () => {
       unsubTeam();
-      unsubFacility();
       unsubPlayers();
       unsubActivities();
-      unsubSession();
       unsubMatches();
       unsubFocuses();
       unsubObs();
@@ -133,8 +134,14 @@ export function App() {
       unsubClubSessions();
       unsubFairness();
       unsubTemplates();
+      unsubFieldSettings();
     };
   }, [authUser, coachProfile, isTestMode]);
+
+  const currentClubSession = useMemo(
+    () => selectCurrentClubSession(clubSessions, currentClubSessionId),
+    [clubSessions, currentClubSessionId]
+  );
 
   // Compute current active match for HomeView and default MatchView selection
   const activeMatch = useMemo<MatchRecord>(() => {
@@ -157,14 +164,6 @@ export function App() {
       setObservations(prev => [...prev, newObs]);
     } else {
       CloudStorageEngine.addObservation(newObs);
-    }
-  };
-
-  const handleUpdateSession = (updatedSession: TrainingSession) => {
-    if (isTestMode) {
-      setSession(updatedSession);
-    } else {
-      CloudStorageEngine.saveSession(updatedSession);
     }
   };
 
@@ -223,6 +222,7 @@ export function App() {
 
   const handleSaveClubSession = (updatedSession: ClubTrainingSession) => {
     setClubSessions(prev => [updatedSession, ...prev.filter(item => item.id !== updatedSession.id)]);
+    setCurrentClubSessionId(updatedSession.id);
     if (!isTestMode) void CloudStorageEngine.saveClubSession(updatedSession);
   };
 
@@ -231,41 +231,47 @@ export function App() {
     if (!isTestMode) void CloudStorageEngine.saveClubTemplate(template);
   };
 
+  const handleDeleteClubTemplate = (templateId: string) => {
+    setSavedClubTemplates(previous => previous.filter(template => template.id !== templateId));
+    if (!isTestMode) void CloudStorageEngine.deleteClubTemplate(templateId);
+  };
+
+  const handleSaveFieldSetting = (setting: SavedFieldSetting) => {
+    setSavedFieldSettings(previous => [setting, ...previous.filter(item => item.id !== setting.id)]);
+    if (!isTestMode) void CloudStorageEngine.saveFieldSetting(setting);
+  };
+
+  const handleDeleteFieldSetting = (settingId: string) => {
+    setSavedFieldSettings(previous => previous.filter(item => item.id !== settingId));
+    if (!isTestMode) void CloudStorageEngine.deleteFieldSetting(settingId);
+  };
+
 
   const handleApplyMatchPrioritiesToSession = (priorities: string[]) => {
-    const updated = {
-      ...session,
-      primaryObjectives: priorities
-    };
-    handleUpdateSession(updated);
+    if (currentClubSession) handleSaveClubSession({ ...currentClubSession, sessionObjectives: priorities });
     setActiveTab('train');
   };
 
   const handleAddActivityToSession = (act: Activity) => {
-    const updatedBlocks = [
-      ...session.blocks,
-      {
-        id: `b-${Date.now()}`,
-        title: act.name,
-        blockType: 'fielding' as const,
-        durationMinutes: act.durationMinutes,
-        activityId: act.id,
-        location: act.spaceRequired === 'net' ? 'Nets' : 'Outfield',
-        objective: act.purpose
-      }
-    ];
+    if (!currentClubSession || currentClubSession.blocks.some(block => block.activityId === act.id)) return;
+    handleSaveClubSession({ ...currentClubSession, blocks: [...currentClubSession.blocks, activityToClubBlock(act)] });
+  };
 
-    const newDuration = session.durationMinutes + act.durationMinutes;
-    handleUpdateSession({
-      ...session,
-      durationMinutes: newDuration,
-      blocks: updatedBlocks
-    });
+  const handleUndoActivity = (activityId: string) => {
+    if (!currentClubSession) return;
+    handleSaveClubSession({ ...currentClubSession, blocks: currentClubSession.blocks.filter(block => block.activityId !== activityId) });
   };
 
   const handleCompleteSession = () => {
-    const completedSession = { ...session, status: 'completed' as const };
-    handleUpdateSession(completedSession);
+    if (currentClubSession) {
+      const completed = completeSessionWithFairness(currentClubSession, players, fairnessLedger);
+      handleSaveClubSession(completed.session);
+      if (completed.applied) {
+        setFairnessLedger(completed.ledger);
+        if (!isTestMode) void CloudStorageEngine.saveFairnessLedger(completed.ledger);
+      }
+      setCurrentClubSessionId(undefined);
+    }
     setIsLiveMode(false);
     setActiveTab('home');
   };
@@ -327,19 +333,19 @@ export function App() {
     return <LoginView onTestAccess={() => setIsTestMode(true)} />;
   }
 
-  if (isLiveMode) {
+  if (isLiveMode && currentClubSession) {
     return (
-      <div className="app-container" style={{ padding: '16px' }}>
-        <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Live Mode...</div>}>
-          <LiveModeView
-            session={session}
-            players={players}
-            facility={facility}
-            onExitLive={() => setIsLiveMode(false)}
-            onOpenQuickObservation={p => setObservedPlayer(p)}
-            onCompleteSession={handleCompleteSession}
-          />
-        </Suspense>
+      <div className="app-container" style={{ padding: '16px', maxWidth: '1400px' }}>
+        <LiveClubSession
+          session={currentClubSession}
+          players={players}
+          teams={clubTeams}
+          resources={trainingResources}
+          onUpdateSession={handleSaveClubSession}
+          onExitLive={() => setIsLiveMode(false)}
+          onOpenQuickObservation={p => setObservedPlayer(p)}
+          onCompleteSession={handleCompleteSession}
+        />
         <QuickObservationDrawer
           player={observedPlayer}
           developmentFocuses={focuses}
@@ -370,11 +376,12 @@ export function App() {
     >
       {activeTab === 'home' && (
         <HomeView
-          session={session}
+          session={currentClubSession}
           match={activeMatch}
           players={players}
           focuses={focuses}
-          onStartLiveSession={() => setIsLiveMode(true)}
+          resources={trainingResources}
+          onStartLiveSession={() => { if (currentClubSession) setIsLiveMode(true); }}
           onNavigateToTrain={() => setActiveTab('train')}
           onNavigateToMatch={() => setActiveTab('match')}
           onNavigateToTeam={() => setActiveTab('team')}
@@ -383,19 +390,19 @@ export function App() {
 
       {activeTab === 'train' && (
         <TrainView
-          session={session}
-          facility={facility}
           players={players}
-          onUpdateSession={handleUpdateSession}
-          onStartLiveSession={() => setIsLiveMode(true)}
-          onOpenQuickObservation={p => setObservedPlayer(p)}
           clubTeams={clubTeams}
           trainingResources={trainingResources}
-          clubSession={clubSessions[0]}
+          currentSession={currentClubSession}
           fairnessLedger={fairnessLedger}
           savedClubTemplates={savedClubTemplates}
           onSaveClubSession={handleSaveClubSession}
           onSaveClubTemplate={handleSaveClubTemplate}
+          onDeleteClubTemplate={handleDeleteClubTemplate}
+          onStartLiveSession={(session) => {
+            handleSaveClubSession({ ...session, status: 'live' });
+            setIsLiveMode(true);
+          }}
         />
       )}
 
@@ -404,8 +411,8 @@ export function App() {
           players={players}
           focuses={focuses}
           observations={observations}
-          session={session}
-          onUpdateSession={handleUpdateSession}
+          session={currentClubSession}
+          onUpdateSession={handleSaveClubSession}
           onOpenQuickObservation={p => setObservedPlayer(p)}
           onAddDevelopmentFocus={handleAddDevelopmentFocus}
           onUpdateDevelopmentFocusState={handleUpdateDevelopmentFocusState}
@@ -431,6 +438,8 @@ export function App() {
         <LibraryView
           activities={activities}
           onAddActivityToSession={handleAddActivityToSession}
+          addedActivityIds={currentClubSession?.blocks.flatMap(block => block.activityId ? [block.activityId] : [])}
+          onUndoAddActivity={handleUndoActivity}
         />
       )}
 
@@ -443,7 +452,13 @@ export function App() {
 
       {isFieldBoardOpen && (
         <Suspense fallback={null}>
-          <FieldBoardModal onClose={() => setIsFieldBoardOpen(false)} />
+          <FieldBoardModal
+            onClose={() => setIsFieldBoardOpen(false)}
+            savedSettings={savedFieldSettings}
+            matchId={activeMatch?.id}
+            onSaveSetting={handleSaveFieldSetting}
+            onDeleteSetting={handleDeleteFieldSetting}
+          />
         </Suspense>
       )}
 

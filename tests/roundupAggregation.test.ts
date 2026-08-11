@@ -3,7 +3,8 @@ import {
   filterReportsByDateRange,
   aggregateTagFrequencies,
   groupReportsByTeam,
-  getTopRecurringIssues
+  getTopRecurringIssues,
+  getLatestReport
 } from '../src/modules/cricket/roundupAggregation';
 import type { MatchReport, ClubTeam } from '../src/types/cricket';
 
@@ -92,5 +93,10 @@ describe('Round-Up Aggregation Logic', () => {
     // team-3 submitted zero reports
     const team3Group = grouped.find(g => g.team.id === 'team-3');
     expect(team3Group?.reports.length).toBe(0);
+  });
+
+  it('finds the latest report using submission time', () => {
+    expect(getLatestReport(mockReports)?.id).toBe('rep-1');
+    expect(getLatestReport([])).toBeUndefined();
   });
 });

@@ -14,6 +14,7 @@ import type {
   PriorityMatchup,
   ClubTrainingSession
 } from '../../types/cricket';
+import { buildBlockDurations } from './sessionModel';
 
 export interface FeasibilityResult {
   totalNetBattingCapacityMinutes: number;
@@ -45,7 +46,20 @@ export interface ClubRotationEngineOutput {
   explainablePlanScore: number;
   warnings: string[];
   unsatisfiedSoftConstraints: string[];
+  capacityMetrics: {
+    theoreticalCapacityMinutes: number;
+    staffableCapacityMinutes: number;
+    actuallyAllocatedCapacityMinutes: number;
+    unusedCapacityMinutes: number;
+  };
 }
+
+const battingCapacity = (resource: TrainingResource): number =>
+  resource.type === 'centre_wicket' || resource.type === 'centre_wicket_half'
+    ? resource.maxBatters || 2
+    : ['standard_net', 'spin_net', 'pace_new_ball_net', 'bowling_machine_net'].includes(resource.type)
+      ? resource.maxBatters
+      : 0;
 
 // Convert "HH:MM" to minutes from midnight
 function timeToMinutes(timeStr: string): number {
@@ -77,8 +91,7 @@ export function calculateSessionFeasibility(options: {
     availableResources,
     attendingPlayers,
     staffAssignments,
-    sessionDurationMinutes,
-    rotationBlockDurationMinutes
+    sessionDurationMinutes
   } = options;
 
   const activeNets = availableResources.filter(
@@ -89,17 +102,15 @@ export function calculateSessionFeasibility(options: {
     r => r.active && (r.type === 'centre_wicket' || r.type === 'centre_wicket_half')
   );
 
-  const numberOfBlocks = Math.max(1, Math.floor(sessionDurationMinutes / Math.max(5, rotationBlockDurationMinutes)));
-
-  // Total net capacity = sum of (net.maxBatters * rotationBlockMinutes * numberOfBlocks)
+  // Capacity uses the full scheduled duration, including an explicit shortened final block.
   let totalNetBattingCapacityMinutes = 0;
   activeNets.forEach(net => {
-    totalNetBattingCapacityMinutes += net.maxBatters * rotationBlockDurationMinutes * numberOfBlocks;
+    totalNetBattingCapacityMinutes += net.maxBatters * sessionDurationMinutes;
   });
 
   // Include centre-wicket batting capacity if present
   activeCentreWickets.forEach(cw => {
-    totalNetBattingCapacityMinutes += (cw.maxBatters || 2) * rotationBlockDurationMinutes * numberOfBlocks;
+    totalNetBattingCapacityMinutes += (cw.maxBatters || 2) * sessionDurationMinutes;
   });
 
   // Filter players who require batting turns
@@ -177,7 +188,8 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
   const finishMins = timeToMinutes(sessionFinishTime || '19:30');
   const totalMins = Math.max(15, finishMins - startMins);
   const blockMins = Math.max(5, rotationBlockDurationMinutes || 12);
-  const totalBlocksCount = Math.max(1, Math.floor(totalMins / blockMins));
+  const blockDurations = buildBlockDurations(totalMins, blockMins);
+  const totalBlocksCount = blockDurations.length;
 
   const activeResources = resources.filter(r => r.active);
   const leaderIds = new Set(options.teams.flatMap(team => [...(team.captainIds || []), ...(team.coachIds || [])]));
@@ -196,7 +208,8 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
       rotationBlocks: [],
       explainablePlanScore: 0,
       warnings: ['No active training resources configured. Please activate nets or centre wicket.'],
-      unsatisfiedSoftConstraints: ['No active resources available.']
+      unsatisfiedSoftConstraints: ['No active resources available.'],
+      capacityMetrics: { theoreticalCapacityMinutes: 0, staffableCapacityMinutes: 0, actuallyAllocatedCapacityMinutes: 0, unusedCapacityMinutes: 0 }
     };
   }
 
@@ -205,7 +218,8 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
       rotationBlocks: [],
       explainablePlanScore: 100,
       warnings: ['No attending players for this session.'],
-      unsatisfiedSoftConstraints: []
+      unsatisfiedSoftConstraints: [],
+      capacityMetrics: { theoreticalCapacityMinutes: 0, staffableCapacityMinutes: 0, actuallyAllocatedCapacityMinutes: 0, unusedCapacityMinutes: 0 }
     };
   }
 
@@ -235,8 +249,9 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
       continue;
     }
 
-    const bStartMins = startMins + bIndex * blockMins;
-    const bEndMins = bStartMins + blockMins;
+    const currentBlockMins = blockDurations[bIndex];
+    const bStartMins = startMins + blockDurations.slice(0, bIndex).reduce((sum, value) => sum + value, 0);
+    const bEndMins = bStartMins + currentBlockMins;
     const blockStartTimeStr = minutesToTime(bStartMins);
     const blockEndTimeStr = minutesToTime(bEndMins);
 
@@ -316,7 +331,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
         cwBatters.forEach(b => {
           resourceBatters.push(b.id);
           assignedInBlock.add(b.id);
-          sessionBattingMinutesMap.set(b.id, (sessionBattingMinutesMap.get(b.id) || 0) + blockMins);
+          sessionBattingMinutesMap.set(b.id, (sessionBattingMinutesMap.get(b.id) || 0) + currentBlockMins);
         });
 
         cwBowlers.forEach(b => {
@@ -373,7 +388,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
           if (b) {
             resourceBatters.push(b.id);
             assignedInBlock.add(b.id);
-            sessionBattingMinutesMap.set(b.id, (sessionBattingMinutesMap.get(b.id) || 0) + blockMins);
+            sessionBattingMinutesMap.set(b.id, (sessionBattingMinutesMap.get(b.id) || 0) + currentBlockMins);
           }
         }
 
@@ -436,7 +451,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
                 id: `prio-${bIndex}-${res.id}`,
                 batterPlayerId: bId,
                 targetBowlerStyleOrId: staffAss.matchupRequirements[0],
-                durationMinutes: Math.min(4, Math.floor(blockMins / 2)),
+                durationMinutes: Math.min(4, Math.floor(currentBlockMins / 2)),
                 notes: `Staff approved priority matchup vs ${staffAss.matchupRequirements[0]}`
               }
             ];
@@ -453,7 +468,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
       }
 
       const participants = [...resourceBatters, ...resourceBowlers, ...resourceKeepers, ...resourceFeeders, ...resourceFielders, ...resourceRest];
-      const leaderId = participants.find(id => leaderIds.has(id)) || participants[0];
+      const leaderId = participants.find(id => leaderIds.has(id));
       if (res.requiresCoachOrLeader && !leaderId) {
         blockAlerts.push(`${res.name}: Cannot open because no lane leader is available.`);
       }
@@ -483,7 +498,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
     rotationBlocks.push({
       blockId: `block-${bIndex + 1}`,
       blockIndex: bIndex,
-      durationMinutes: blockMins,
+      durationMinutes: currentBlockMins,
       startTime: blockStartTimeStr,
       endTime: blockEndTimeStr,
       resourceAssignments,
@@ -516,11 +531,33 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
     unsatisfiedSoftConstraints.push(`${zeroBattingPlayers.length} player(s) did not receive a batting turn.`);
   }
 
+  const theoreticalCapacityMinutes = rotationBlocks.reduce((total, block) => total + activeResources.reduce((sum, resource) => sum + battingCapacity(resource) * block.durationMinutes, 0), 0);
+  const staffableCapacityMinutes = rotationBlocks.reduce((total, block) => total + block.resourceAssignments.reduce((sum, assignment) => {
+    const resource = activeResources.find(item => item.id === assignment.resourceId);
+    if (!resource || (resource.requiresCoachOrLeader && !assignment.leaderId)) return sum;
+    return sum + battingCapacity(resource) * block.durationMinutes;
+  }, 0), 0);
+  const actuallyAllocatedCapacityMinutes = rotationBlocks.reduce((total, block) => total + block.resourceAssignments.reduce((sum, assignment) => sum + assignment.batterPlayerIds.length * block.durationMinutes, 0), 0);
+  const unusedCapacityMinutes = Math.max(0, staffableCapacityMinutes - actuallyAllocatedCapacityMinutes);
+
+  activeResources.forEach(resource => {
+    const assignments = rotationBlocks.flatMap(block => block.resourceAssignments.filter(item => item.resourceId === resource.id));
+    const used = assignments.some(assignment => assignment.batterPlayerIds.length + assignment.bowlerPodPlayerIds.length + assignment.wicketkeeperPlayerIds.length + assignment.feederPlayerIds.length + assignment.fieldingPlayerIds.length > 0);
+    if (!used) warnings.push(`${resource.name}: Selected but unused.`);
+    if (resource.requiresCoachOrLeader && assignments.some(assignment => !assignment.leaderId)) warnings.push(`${resource.name}: Capacity is configured but not staffed in one or more blocks.`);
+  });
+
+  if (staffableCapacityMinutes > 0 && unusedCapacityMinutes / staffableCapacityMinutes > 0.25) {
+    score -= 10;
+    unsatisfiedSoftConstraints.push(`${unusedCapacityMinutes} staffable batting minutes remain unused.`);
+  }
+
   return {
     rotationBlocks,
     explainablePlanScore: Math.max(0, score),
     warnings,
-    unsatisfiedSoftConstraints
+    unsatisfiedSoftConstraints,
+    capacityMetrics: { theoreticalCapacityMinutes, staffableCapacityMinutes, actuallyAllocatedCapacityMinutes, unusedCapacityMinutes }
   };
 }
 
@@ -790,7 +827,7 @@ export function updateRollingFairnessLedger(
         totalBattingMinutes: existing.totalBattingMinutes + rec.actualBattingMinutes,
         totalDeliveriesBowled: existing.totalDeliveriesBowled + rec.deliveriesBowled,
         totalCentreWicketOvers: existing.totalCentreWicketOvers + rec.centreWicketOvers,
-        accumulatedFairnessCreditMinutes: existing.accumulatedFairnessCreditMinutes + rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted
+        accumulatedFairnessCreditMinutes: Math.round((existing.accumulatedFairnessCreditMinutes + rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10
       };
     } else {
       updated.push({
@@ -799,10 +836,22 @@ export function updateRollingFairnessLedger(
         totalBattingMinutes: rec.actualBattingMinutes,
         totalDeliveriesBowled: rec.deliveriesBowled,
         totalCentreWicketOvers: rec.centreWicketOvers,
-        accumulatedFairnessCreditMinutes: rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted
+        accumulatedFairnessCreditMinutes: Math.round((rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10
       });
     }
   });
 
   return updated;
+}
+
+export function completeSessionWithFairness(
+  session: ClubTrainingSession,
+  players: Player[],
+  ledger: RollingFairnessLedger[],
+  completedAt = new Date().toISOString()
+): { session: ClubTrainingSession; ledger: RollingFairnessLedger[]; applied: boolean } {
+  if (session.fairnessAppliedAt) return { session, ledger, applied: false };
+  const completedSession: ClubTrainingSession = { ...session, status: 'completed', completedAt, fairnessAppliedAt: completedAt, currentLiveState: undefined };
+  const records = calculateSessionFairness(completedSession, players);
+  return { session: completedSession, ledger: updateRollingFairnessLedger(ledger, records), applied: true };
 }

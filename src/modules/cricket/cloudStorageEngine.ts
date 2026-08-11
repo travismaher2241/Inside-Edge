@@ -6,7 +6,8 @@ import {
   collection,
   onSnapshot,
   getDocs,
-  writeBatch
+  writeBatch,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import type {
@@ -14,7 +15,6 @@ import type {
   Facility,
   Player,
   Activity,
-  TrainingSession,
   MatchRecord,
   DevelopmentFocus,
   Observation,
@@ -23,14 +23,14 @@ import type {
   TrainingResource,
   ClubTrainingSession,
   RollingFairnessLedger,
-  SavedClubTemplate
+  SavedClubTemplate,
+  SavedFieldSetting
 } from '../../types/cricket';
 import {
   SEED_TEAM,
   SEED_FACILITY,
   SEED_PLAYERS,
   SEED_ACTIVITIES,
-  SEED_SESSION,
   SEED_MATCH_RECORD,
   SEED_DEVELOPMENT_FOCUSES,
   SEED_OBSERVATIONS,
@@ -43,8 +43,7 @@ import {
 // Document & Collection IDs
 const SINGLE_DOCS = {
   TEAM: doc(db, 'coachTeam', 'main_team'),
-  FACILITY: doc(db, 'facility', 'main_facility'),
-  SESSION: doc(db, 'sessions', 'current_session')
+  FACILITY: doc(db, 'facility', 'main_facility')
 };
 
 /**
@@ -62,7 +61,6 @@ export async function seedDefaultFirestoreIfEmpty(): Promise<void> {
 
     batch.set(SINGLE_DOCS.TEAM, SEED_TEAM);
     batch.set(SINGLE_DOCS.FACILITY, SEED_FACILITY);
-    batch.set(SINGLE_DOCS.SESSION, SEED_SESSION);
 
     SEED_PLAYERS.forEach(p => {
       batch.set(doc(db, 'players', p.id), p);
@@ -165,20 +163,6 @@ export const CloudStorageEngine = {
     await setDoc(doc(db, 'activities', activity.id), activity);
   },
 
-  // Session
-  subscribeToSession: (callback: (session: TrainingSession) => void): (() => void) => {
-    return onSnapshot(SINGLE_DOCS.SESSION, snap => {
-      if (snap.exists()) {
-        callback(snap.data() as TrainingSession);
-      } else {
-        callback(SEED_SESSION);
-      }
-    });
-  },
-  saveSession: async (session: TrainingSession): Promise<void> => {
-    await setDoc(SINGLE_DOCS.SESSION, session);
-  },
-
   // Matches
   subscribeToMatches: (callback: (matches: MatchRecord[]) => void): (() => void) => {
     return onSnapshot(collection(db, 'matches'), snap => {
@@ -275,5 +259,16 @@ export const CloudStorageEngine = {
     onSnapshot(collection(db, 'savedClubTemplates'), snap => callback(snap.empty ? SEED_SAVED_TEMPLATES : snap.docs.map(item => item.data() as SavedClubTemplate))),
   saveClubTemplate: async (template: SavedClubTemplate): Promise<void> => {
     await setDoc(doc(db, 'savedClubTemplates', template.id), template);
+  },
+  deleteClubTemplate: async (templateId: string): Promise<void> => {
+    await deleteDoc(doc(db, 'savedClubTemplates', templateId));
+  },
+  subscribeToSavedFieldSettings: (callback: (settings: SavedFieldSetting[]) => void): (() => void) =>
+    onSnapshot(collection(db, 'savedFieldSettings'), snap => callback(snap.docs.map(item => item.data() as SavedFieldSetting))),
+  saveFieldSetting: async (setting: SavedFieldSetting): Promise<void> => {
+    await setDoc(doc(db, 'savedFieldSettings', setting.id), setting);
+  },
+  deleteFieldSetting: async (settingId: string): Promise<void> => {
+    await deleteDoc(doc(db, 'savedFieldSettings', settingId));
   }
 };

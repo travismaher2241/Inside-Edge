@@ -8,7 +8,6 @@ import type {
   RollingFairnessLedger
 } from '../../../types/cricket';
 import { ClubSessionWizard } from './ClubSessionWizard';
-import { LiveClubSession } from './LiveClubSession';
 import { FairnessReviewPanel } from './FairnessReviewPanel';
 import { TrainingTemplateManager } from './TrainingTemplateManager';
 import { Plus, Play, Layers } from 'lucide-react';
@@ -21,8 +20,9 @@ interface ClubTrainingPlannerProps {
   rollingLedger: RollingFairnessLedger[];
   currentSession?: ClubTrainingSession;
   onSaveSession: (session: ClubTrainingSession) => void;
+  onStartLive: (session: ClubTrainingSession) => void;
   onSaveTemplate: (template: SavedClubTemplate) => void;
-  onOpenQuickObservation?: (player: Player) => void;
+  onDeleteTemplate: (templateId: string) => void;
 }
 
 export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
@@ -33,27 +33,21 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
   rollingLedger,
   currentSession,
   onSaveSession,
+  onStartLive,
   onSaveTemplate,
-  onOpenQuickObservation
+  onDeleteTemplate
 }) => {
-  const [activeTab, setActiveTab] = useState<'schedule' | 'templates' | 'fairness'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'templates' | 'fairness'>(() => {
+    const saved = typeof localStorage === 'undefined' ? null : localStorage.getItem('inside_edge_training_tab');
+    return saved === 'templates' || saved === 'fairness' ? saved : 'schedule';
+  });
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
-  const [isLiveMode, setIsLiveMode] = useState<boolean>(false);
-
-  if (isLiveMode && currentSession) {
-    return (
-      <LiveClubSession
-        session={currentSession}
-        players={players}
-        teams={teams}
-        resources={resources}
-        onUpdateSession={onSaveSession}
-        onExitLive={() => setIsLiveMode(false)}
-        onCompleteSession={() => setIsLiveMode(false)}
-        onOpenQuickObservation={onOpenQuickObservation}
-      />
-    );
-  }
+  const [selectedTemplate, setSelectedTemplate] = useState<SavedClubTemplate | undefined>();
+  const activityBlocks = currentSession?.blocks.filter(block => block.type !== 'rotation') ?? [];
+  const selectTab = (tab: 'schedule' | 'templates' | 'fairness') => {
+    setActiveTab(tab);
+    if (typeof localStorage !== 'undefined') localStorage.setItem('inside_edge_training_tab', tab);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -68,7 +62,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
             <Plus size={14} /> NEW SESSION WIZARD
           </button>
           {currentSession && (
-            <button className="btn btn-live" onClick={() => setIsLiveMode(true)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
+            <button className="btn btn-live" onClick={() => onStartLive(currentSession)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
               <Play size={16} /> LIVE MODE
             </button>
           )}
@@ -78,7 +72,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
       {/* Tab Selector */}
       <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '10px', padding: '4px' }}>
         <button
-          onClick={() => setActiveTab('schedule')}
+          onClick={() => selectTab('schedule')}
           style={{
             flex: 1,
             padding: '8px',
@@ -94,7 +88,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
           SESSION PLANNER
         </button>
         <button
-          onClick={() => setActiveTab('templates')}
+          onClick={() => selectTab('templates')}
           style={{
             flex: 1,
             padding: '8px',
@@ -110,7 +104,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
           CLUB TEMPLATES ({savedTemplates.length})
         </button>
         <button
-          onClick={() => setActiveTab('fairness')}
+          onClick={() => selectTab('fairness')}
           style={{
             flex: 1,
             padding: '8px',
@@ -141,7 +135,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
                   </div>
                 </div>
 
-                <button className="btn btn-live" onClick={() => setIsLiveMode(true)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
+                <button className="btn btn-live" onClick={() => onStartLive(currentSession)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
                   <Play size={16} /> START LIVE
                 </button>
               </div>
@@ -152,6 +146,25 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
                   <span key={i} className="badge badge-green">🎯 {obj}</span>
                 ))}
               </div>
+
+              {activityBlocks.length > 0 && (
+                <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+                    SESSION ACTIVITIES ({activityBlocks.length})
+                  </div>
+                  {activityBlocks.map(block => (
+                    <div key={block.id} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', fontSize: '0.78rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 700 }}>
+                        <span>{block.title}</span>
+                        <span style={{ color: 'var(--accent-gold)', whiteSpace: 'nowrap' }}>{block.durationMinutes} mins</span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {block.location ? `${block.location} · ` : ''}{block.objective}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Rotation Block Summary */}
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -176,7 +189,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
               <Layers size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px auto' }} />
               <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>No Active Club Session Planned</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px', marginBottom: '16px' }}>
-                Launch the 7-step Club Training Planner Wizard to generate a dynamic schedule for any number of teams and resources.
+                Create a dynamic schedule for any number of teams and active resources.
               </p>
               <button className="btn btn-gold" onClick={() => setIsWizardOpen(true)} style={{ width: 'auto', padding: '0 16px' }}>
                 <Plus size={16} /> LAUNCH PLANNING WIZARD
@@ -190,10 +203,15 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
       {activeTab === 'templates' && (
         <TrainingTemplateManager
           templates={savedTemplates}
-          onApplyTemplate={() => {
+          teams={teams}
+          resources={resources}
+          currentSession={currentSession}
+          onApplyTemplate={(template) => {
+            setSelectedTemplate(template);
             setIsWizardOpen(true);
           }}
           onSaveTemplate={onSaveTemplate}
+          onDeleteTemplate={onDeleteTemplate}
         />
       )}
 
@@ -213,7 +231,11 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
           players={players}
           savedTemplates={savedTemplates}
           rollingLedger={rollingLedger}
-          onSaveSession={onSaveSession}
+          selectedTemplate={selectedTemplate}
+          onFinalise={(session, action) => {
+            onSaveSession(session);
+            if (action === 'launch') onStartLive(session);
+          }}
           onSaveTemplate={onSaveTemplate}
           onClose={() => setIsWizardOpen(false)}
         />

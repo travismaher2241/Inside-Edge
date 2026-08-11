@@ -70,6 +70,8 @@ body {
   -webkit-font-smoothing: antialiased;
   touch-action: manipulation;
   overflow-x: hidden;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 /* App Shell Layout */
@@ -77,7 +79,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  max-width: 600px; /* Mobile Viewport Focus */
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
   background-color: var(--bg-app);
   position: relative;
@@ -134,7 +137,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
-  max-width: 600px;
+  max-width: 1200px;
   background: var(--bg-surface);
   border-top: 1px solid var(--border-light);
   display: flex;
@@ -212,6 +215,39 @@ body {
   width: 100%;
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--accent-gold);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-elevated);
+  color: var(--text-main);
+  font: inherit;
+}
+
+textarea { min-height: 88px; resize: vertical; }
+label, legend { color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; }
+fieldset { border: 1px solid var(--border-light); border-radius: var(--radius-md); padding: 10px; }
+input[type='checkbox'], input[type='radio'] { width: 20px; min-height: 20px; margin: 0 6px 0 0; vertical-align: middle; }
+
 .btn-primary {
   background: linear-gradient(135deg, var(--primary-green-light), var(--primary-green));
   color: #ffffff;
@@ -284,7 +320,7 @@ body {
   border-top: 1px solid var(--border-gold);
   border-radius: 20px 20px 0 0;
   width: 100%;
-  max-width: 600px;
+  max-width: min(960px, 100%);
   padding: var(--space-lg);
   max-height: 85vh;
   overflow-y: auto;
@@ -336,6 +372,44 @@ body {
   font-weight: 700;
 }
 
+@media (min-width: 840px) {
+  .app-main { padding: var(--space-lg); padding-bottom: 96px; }
+  .card { padding: 20px; }
+  .bottom-sheet-overlay { align-items: center; padding: 24px; }
+  .bottom-sheet-content { border: 1px solid var(--border-gold); border-radius: var(--radius-lg); }
+  .team-workspace { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .team-roster { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 240px); overflow-y: auto; position: sticky; top: 88px; }
+  .team-roster > button { width: 100%; }
+}
+
+.team-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(160px, 1fr); gap: 10px; margin-bottom: 12px; }
+.team-roster { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.library-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.library-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.match-section-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg-surface-elevated); }
+.match-section-tabs button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 700; cursor: pointer; }
+.match-section-tabs button.active { background: var(--primary-green); color: #fff; }
 .card-section-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg-surface-elevated); }
 .card-section-tabs button { flex: 1; min-height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font: inherit; font-weight: 700; font-size: 0.8rem; cursor: pointer; }
 .card-section-tabs button.active { background: var(--primary-green); color: #fff; }
+.match-progress-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.match-progress-card { min-height: 104px; padding: 12px; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-surface-elevated); color: var(--text-main); display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; text-align: left; cursor: pointer; }
+.match-progress-card svg { color: var(--accent-gold); }
+.match-progress-card span { font-size: 0.85rem; }
+.match-progress-card strong { font-size: 0.75rem; color: var(--text-secondary); }
+.match-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.match-overview-grid > div { padding: 12px; border-radius: var(--radius-md); background: var(--bg-surface-elevated); display: flex; flex-direction: column; gap: 4px; }
+.match-overview-grid span { font-size: 0.75rem; color: var(--text-secondary); }
+.match-overview-grid strong { font-size: 0.9rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .app-header { align-items: flex-start; }
+  .app-main { padding: 12px; padding-bottom: 88px; }
+  .nav-item { padding: 6px 8px; min-width: 44px; }
+  .live-action-grid { grid-template-columns: 1fr; }
+  .team-filters { grid-template-columns: 1fr; }
+  .library-filters { grid-template-columns: 1fr 1fr; }
+  .match-section-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .match-progress-grid, .match-overview-grid { grid-template-columns: 1fr 1fr; }
+}

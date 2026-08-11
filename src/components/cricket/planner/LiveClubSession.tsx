@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { ClubTrainingSession, Player, ClubTeam, TrainingResource } from '../../../types/cricket';
 import { handleLiveNoShow, handleLiveLateArrival, handleLiveInjury, handleManualSwap, recalculateFutureRotations } from '../../../modules/cricket/clubRotationEngine';
 import { ResourceLeaderView } from './ResourceLeaderView';
-import { Play, Pause, SkipForward, ArrowLeft, UserX, Clock, Activity, RefreshCw, Shuffle } from 'lucide-react';
+import { Play, Pause, SkipForward, ArrowLeft, RefreshCw, Undo2, Settings2, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+
+type LiveChangeType = 'absent' | 'late' | 'injury' | 'swap';
 
 interface LiveClubSessionProps {
   session: ClubTrainingSession;
@@ -25,24 +27,35 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   onCompleteSession,
   onOpenQuickObservation
 }) => {
-  const [activeBlockIdx, setActiveBlockIdx] = useState<number>(0);
+  const [activeBlockIdx, setActiveBlockIdx] = useState<number>(session.currentLiveState?.activeRotationIndex ?? session.activeRotationIndex ?? 0);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(
-    (session.rotationDurationMinutes || 12) * 60
+    session.currentLiveState?.secondsRemaining
+      ?? (session.rotationPlan[session.activeRotationIndex ?? 0]?.durationMinutes || session.rotationDurationMinutes || 12) * 60
   );
-  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(true);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(!session.currentLiveState?.isPaused);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [isLeaderViewActive, setIsLeaderViewActive] = useState<boolean>(false);
 
-  // Live Adjustment Modals
-  const [showNoShowModal, setShowNoShowModal] = useState<boolean>(false);
-  const [showLateArrivalModal, setShowLateArrivalModal] = useState<boolean>(false);
-  const [showInjuryModal, setShowInjuryModal] = useState<boolean>(false);
-  const [showSwapModal, setShowSwapModal] = useState<boolean>(false);
+  const [showChangeModal, setShowChangeModal] = useState<boolean>(false);
+  const [changeType, setChangeType] = useState<LiveChangeType>('absent');
 
   const [selectedPlayerForChange, setSelectedPlayerForChange] = useState<string>('');
   const [arrivalTimeInput, setArrivalTimeInput] = useState<string>('18:30');
   const [injuryNotesInput, setInjuryNotesInput] = useState<string>('Hamstring tightness - no bowling');
   const [swapPlayerId, setSwapPlayerId] = useState<string>('');
+  const [undoStack, setUndoStack] = useState<ClubTrainingSession[]>([]);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [recalculatedFromBlock, setRecalculatedFromBlock] = useState<number | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [vibrationEnabled, setVibrationEnabled] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
+  const warnedAt = useRef<Set<number>>(new Set());
+  const latestSessionRef = useRef(session);
+  const latestUpdateRef = useRef(onUpdateSession);
+  latestSessionRef.current = session;
+  latestUpdateRef.current = onUpdateSession;
+  const playerById = useMemo(() => new Map(players.map(player => [player.id, player])), [players]);
 
   const currentBlockPlan = session.rotationPlan[activeBlockIdx] || session.rotationPlan[0];
   const activeResourceAssignments = currentBlockPlan?.resourceAssignments || [];
@@ -65,6 +78,77 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     return () => clearInterval(interval);
   }, [isTimerRunning]);
 
+  useEffect(() => {
+    if (secondsRemaining !== 0 || !isTimerRunning) return;
+    setIsTimerRunning(false);
+    const currentSession = latestSessionRef.current;
+    setSaveState('saving');
+    latestUpdateRef.current({
+      ...currentSession,
+      activeRotationIndex: activeBlockIdx,
+      currentLiveState: {
+        activeBlockIndex: currentSession.activeBlockIndex,
+        activeRotationIndex: activeBlockIdx,
+        secondsRemaining: 0,
+        isPaused: true,
+        updatedAt: new Date().toISOString()
+      }
+    });
+    setSaveState('saved');
+  }, [secondsRemaining, activeBlockIdx, isTimerRunning]);
+
+  useEffect(() => {
+    const online = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline); };
+  }, []);
+
+  useEffect(() => {
+    if (![60, 0].includes(secondsRemaining) || warnedAt.current.has(secondsRemaining)) return;
+    warnedAt.current.add(secondsRemaining);
+    if (vibrationEnabled && 'vibrate' in navigator) navigator.vibrate(secondsRemaining === 0 ? [200, 100, 200] : 150);
+    if (soundEnabled) {
+      try {
+        const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AudioContextClass) {
+          const context = new AudioContextClass();
+          const oscillator = context.createOscillator();
+          oscillator.connect(context.destination);
+          oscillator.frequency.value = secondsRemaining === 0 ? 880 : 660;
+          oscillator.onended = () => { void context.close(); };
+          oscillator.start();
+          oscillator.stop(context.currentTime + 0.15);
+        }
+      } catch { /* Browser may require a prior user gesture. */ }
+    }
+    if (secondsRemaining === 0) setFeedback({ kind: 'success', message: 'Block complete. Timer paused—advance when ready.' });
+  }, [secondsRemaining, soundEnabled, vibrationEnabled]);
+
+  useEffect(() => {
+    if (!isTimerRunning || secondsRemaining <= 0 || secondsRemaining % 15 !== 0) return;
+    setSaveState('saving');
+    const currentSession = latestSessionRef.current;
+    latestUpdateRef.current({ ...currentSession, activeRotationIndex: activeBlockIdx, currentLiveState: { activeBlockIndex: currentSession.activeBlockIndex, activeRotationIndex: activeBlockIdx, secondsRemaining, isPaused: false, updatedAt: new Date().toISOString() } });
+    setSaveState('saved');
+  }, [secondsRemaining, activeBlockIdx, isTimerRunning]);
+
+  const persistLiveState = (updates: Partial<NonNullable<ClubTrainingSession['currentLiveState']>> = {}) => {
+    onUpdateSession({
+      ...session,
+      activeRotationIndex: updates.activeRotationIndex ?? activeBlockIdx,
+      activeBlockIndex: updates.activeBlockIndex ?? session.activeBlockIndex,
+      currentLiveState: {
+        activeBlockIndex: updates.activeBlockIndex ?? session.activeBlockIndex,
+        activeRotationIndex: updates.activeRotationIndex ?? activeBlockIdx,
+        secondsRemaining: updates.secondsRemaining ?? secondsRemaining,
+        isPaused: updates.isPaused ?? !isTimerRunning,
+        updatedAt: new Date().toISOString()
+      }
+    });
+  };
+
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -75,48 +159,65 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     if (activeBlockIdx < session.rotationPlan.length - 1) {
       setActiveBlockIdx(prev => prev + 1);
       const nextBlock = session.rotationPlan[activeBlockIdx + 1];
-      setSecondsRemaining((nextBlock?.durationMinutes || session.rotationDurationMinutes || 12) * 60);
+      const nextSeconds = (nextBlock?.durationMinutes || session.rotationDurationMinutes || 12) * 60;
+      setSecondsRemaining(nextSeconds);
+      setIsTimerRunning(false);
+      warnedAt.current.clear();
+      setFeedback({ kind: 'success', message: `Advanced to block ${activeBlockIdx + 2}. Timer is paused.` });
+      persistLiveState({ activeRotationIndex: activeBlockIdx + 1, secondsRemaining: nextSeconds, isPaused: true });
     } else {
       onCompleteSession();
     }
+  };
+
+  const commitChange = (updated: ClubTrainingSession, message: string, marksRecalculation = true) => {
+    setUndoStack(stack => [...stack.slice(-9), session]);
+    setSaveState('saving');
+    onUpdateSession(updated);
+    setSaveState('saved');
+    setFeedback({ kind: 'success', message });
+    if (marksRecalculation) setRecalculatedFromBlock(activeBlockIdx + 1);
+    setShowChangeModal(false);
+    setSelectedPlayerForChange('');
+    setSwapPlayerId('');
+  };
+
+  const handleUndo = () => {
+    const previous = undoStack.at(-1);
+    if (!previous) return;
+    onUpdateSession(previous);
+    setUndoStack(stack => stack.slice(0, -1));
+    setFeedback({ kind: 'success', message: 'Last live change undone.' });
+    setRecalculatedFromBlock(null);
   };
 
   // Live Action Handlers (strictly future-only recalculation)
   const handleMarkNoShow = () => {
     if (!selectedPlayerForChange) return;
     const updated = handleLiveNoShow(session, selectedPlayerForChange, activeBlockIdx, players, teams, resources);
-    onUpdateSession(updated);
-    setShowNoShowModal(false);
-    setSelectedPlayerForChange('');
+    commitChange(updated, 'Player marked absent. Future blocks recalculated.');
   };
 
   const handleMarkLateArrival = () => {
     if (!selectedPlayerForChange) return;
     const updated = handleLiveLateArrival(session, selectedPlayerForChange, arrivalTimeInput, activeBlockIdx, players, teams, resources);
-    onUpdateSession(updated);
-    setShowLateArrivalModal(false);
-    setSelectedPlayerForChange('');
+    commitChange(updated, 'Arrival time updated. Future blocks recalculated.');
   };
 
   const handleMarkInjury = () => {
     if (!selectedPlayerForChange) return;
     const updated = handleLiveInjury(session, selectedPlayerForChange, injuryNotesInput, activeBlockIdx, players, teams, resources);
-    onUpdateSession(updated);
-    setShowInjuryModal(false);
-    setSelectedPlayerForChange('');
+    commitChange(updated, 'Restriction applied. Future blocks recalculated.');
   };
 
   const handleForceRecalculateFuture = () => {
     const updated = recalculateFutureRotations(session, activeBlockIdx, players, teams, resources);
-    onUpdateSession(updated);
+    commitChange(updated, 'Future blocks recalculated successfully.');
   };
 
   const handleSwapPlayers = () => {
     if (!selectedPlayerForChange || !swapPlayerId || selectedPlayerForChange === swapPlayerId) return;
-    onUpdateSession(handleManualSwap(session, selectedPlayerForChange, swapPlayerId, activeBlockIdx));
-    setShowSwapModal(false);
-    setSelectedPlayerForChange('');
-    setSwapPlayerId('');
+    commitChange(handleManualSwap(session, selectedPlayerForChange, swapPlayerId, activeBlockIdx), 'Players swapped in future blocks.');
   };
 
   const adjustActiveDuration = (deltaMinutes: number) => {
@@ -131,11 +232,11 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
       ? { ...block, durationMinutes: nextDuration, endTime: toTime(toMinutes(block.endTime) + appliedDelta) }
       : { ...block, startTime: toTime(toMinutes(block.startTime) + appliedDelta), endTime: toTime(toMinutes(block.endTime) + appliedDelta) });
     setSecondsRemaining(value => Math.max(0, value + appliedDelta * 60));
-    onUpdateSession({ ...session, rotationPlan, finishTime: rotationPlan.at(-1)?.endTime || session.finishTime });
+    commitChange({ ...session, rotationPlan, finishTime: rotationPlan.at(-1)?.endTime || session.finishTime }, `Current block ${appliedDelta > 0 ? 'extended' : 'shortened'} by ${Math.abs(appliedDelta)} minutes.`, false);
   };
 
   const isLastBlock = activeBlockIdx === session.rotationPlan.length - 1;
-  const getPlayer = (id: string) => players.find(p => p.id === id);
+  const getPlayer = (id: string) => playerById.get(id);
 
   return (
     <div className="live-viewport" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
@@ -162,7 +263,11 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
         >
           {isLeaderViewActive ? 'SHOW COORDINATOR VIEW' : 'RESOURCE LEADER VIEW'}
         </button>
-        <span className="badge badge-live">● LIVE TRAINING</span>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span className={`badge ${isOnline ? 'badge-green' : 'badge-warning'}`}>{isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}{isOnline ? saveState === 'saving' ? 'Saving…' : 'Saved' : 'Offline'}</span>
+          <button aria-label={soundEnabled ? 'Disable audible warnings' : 'Enable audible warnings'} className="btn btn-secondary" onClick={() => setSoundEnabled(value => !value)} style={{ width: '44px', padding: 0 }}>{soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+          <span className="badge badge-live">Live</span>
+        </div>
       </div>
 
       {/* Hero Timer Display */}
@@ -226,6 +331,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
                     <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-gold)' }}>
                       {resAssign.resourceName}
                     </div>
+                    <span className={`badge ${recalculatedFromBlock !== null && activeBlockIdx >= recalculatedFromBlock ? 'badge-warning' : 'badge-green'}`}>{recalculatedFromBlock !== null && activeBlockIdx >= recalculatedFromBlock ? 'Recalculated' : 'Preserved'}</span>
                   </div>
 
                   {/* Batters */}
@@ -250,33 +356,8 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
           LIVE SESSION CHANGE CONTROLS (FUTURE BLOCKS RECALCULATE ONLY)
         </div>
         <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowNoShowModal(true)}
-            style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}
-          >
-            <UserX size={12} /> MARK ABSENT
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowLateArrivalModal(true)}
-            style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}
-          >
-            <Clock size={12} /> LATE ARRIVAL
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowInjuryModal(true)}
-            style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}
-          >
-            <Activity size={12} /> INJURY / RESTRICT
-          </button>
-
-          <button className="btn btn-secondary" onClick={() => setShowSwapModal(true)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}>
-            <Shuffle size={12} /> SWAP PLAYERS
-          </button>
+          <button className="btn btn-secondary" onClick={() => setShowChangeModal(true)} style={{ width: 'auto' }}><Settings2 size={14} /> Change</button>
+          <button className="btn btn-secondary" onClick={handleUndo} disabled={undoStack.length === 0} style={{ width: 'auto' }}><Undo2 size={14} /> Undo</button>
 
           <button className="btn btn-secondary" onClick={() => adjustActiveDuration(2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}>+2 MINS</button>
           <button className="btn btn-secondary" onClick={() => adjustActiveDuration(-2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}>-2 MINS</button>
@@ -291,11 +372,17 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
         </div>
       </div>
 
+      {feedback && <div role="status" className="card" style={{ padding: '8px 12px', margin: 0, color: feedback.kind === 'error' ? '#f97316' : 'var(--primary-green-light)' }}>{feedback.message}</div>}
+
       {/* Sticky Bottom Play Controls */}
       <div className="live-action-grid">
         <button
           className="btn btn-secondary live-action-btn"
-          onClick={() => setIsTimerRunning(!isTimerRunning)}
+          onClick={() => {
+            const nextRunning = !isTimerRunning;
+            setIsTimerRunning(nextRunning);
+            persistLiveState({ isPaused: !nextRunning });
+          }}
         >
           {isTimerRunning ? <Pause size={18} /> : <Play size={18} />}
           {isTimerRunning ? 'PAUSE TIMER' : 'RESUME TIMER'}
@@ -310,107 +397,21 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
         </button>
       </div>
 
-      {/* No Show Modal */}
-      {showNoShowModal && (
-        <div className="bottom-sheet-overlay" onClick={() => setShowNoShowModal(false)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '10px' }}>Mark Absent / No-Show</h3>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SELECT PLAYER</label>
-            <select
-              value={selectedPlayerForChange}
-              onChange={e => setSelectedPlayerForChange(e.target.value)}
-              style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px', marginBottom: '14px' }}
-            >
-              <option value="">-- Choose Player --</option>
-              {players.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <button className="btn btn-gold" onClick={handleMarkNoShow} disabled={!selectedPlayerForChange}>
-              CONFIRM ABSENT & RECALCULATE FUTURE
-            </button>
+      {showChangeModal && (
+        <div className="bottom-sheet-overlay" onClick={() => setShowChangeModal(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="live-change-title" className="bottom-sheet-content" onClick={event => event.stopPropagation()}>
+            <h2 id="live-change-title">Change live session</h2>
+            <label>Change type<select value={changeType} onChange={event => setChangeType(event.target.value as LiveChangeType)}><option value="absent">Absent / no-show</option><option value="late">Late arrival</option><option value="injury">Injury or restriction</option><option value="swap">Swap future allocations</option></select></label>
+            <label>Player<select value={selectedPlayerForChange} onChange={event => setSelectedPlayerForChange(event.target.value)}><option value="">Choose player</option>{players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
+            {changeType === 'late' && <label>Updated arrival time<input type="time" value={arrivalTimeInput} onChange={event => setArrivalTimeInput(event.target.value)} /></label>}
+            {changeType === 'injury' && <label>Restriction notes<input value={injuryNotesInput} onChange={event => setInjuryNotesInput(event.target.value)} /></label>}
+            {changeType === 'swap' && <label>Swap with<select value={swapPlayerId} onChange={event => setSwapPlayerId(event.target.value)}><option value="">Choose player</option>{players.filter(player => player.id !== selectedPlayerForChange).map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
+            <label style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}><input type="checkbox" checked={vibrationEnabled} onChange={event => setVibrationEnabled(event.target.checked)} /> Vibration warnings</label>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}><button className="btn btn-secondary" onClick={() => setShowChangeModal(false)}>Cancel</button><button className="btn btn-gold" disabled={!selectedPlayerForChange || (changeType === 'swap' && !swapPlayerId)} onClick={() => { if (changeType === 'absent') handleMarkNoShow(); else if (changeType === 'late') handleMarkLateArrival(); else if (changeType === 'injury') handleMarkInjury(); else handleSwapPlayers(); }}>Apply change</button></div>
           </div>
         </div>
       )}
 
-      {/* Late Arrival Modal */}
-      {showLateArrivalModal && (
-        <div className="bottom-sheet-overlay" onClick={() => setShowLateArrivalModal(false)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '10px' }}>Mark Late Arrival</h3>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SELECT PLAYER</label>
-            <select
-              value={selectedPlayerForChange}
-              onChange={e => setSelectedPlayerForChange(e.target.value)}
-              style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px', marginBottom: '10px' }}
-            >
-              <option value="">-- Choose Player --</option>
-              {players.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>UPDATED ARRIVAL TIME</label>
-            <input
-              type="time"
-              value={arrivalTimeInput}
-              onChange={e => setArrivalTimeInput(e.target.value)}
-              style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px', marginBottom: '14px' }}
-            />
-            <button className="btn btn-gold" onClick={handleMarkLateArrival} disabled={!selectedPlayerForChange}>
-              UPDATE ARRIVAL & RECALCULATE FUTURE
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Injury Modal */}
-      {showInjuryModal && (
-        <div className="bottom-sheet-overlay" onClick={() => setShowInjuryModal(false)}>
-          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '10px' }}>Mark Live Injury / Restriction</h3>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SELECT PLAYER</label>
-            <select
-              value={selectedPlayerForChange}
-              onChange={e => setSelectedPlayerForChange(e.target.value)}
-              style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px', marginBottom: '10px' }}
-            >
-              <option value="">-- Choose Player --</option>
-              {players.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>INJURY / RESTRICTION NOTES</label>
-            <input
-              type="text"
-              value={injuryNotesInput}
-              onChange={e => setInjuryNotesInput(e.target.value)}
-              style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px', marginBottom: '14px' }}
-            />
-            <button className="btn btn-gold" onClick={handleMarkInjury} disabled={!selectedPlayerForChange}>
-              APPLY RESTRICTION & RECALCULATE FUTURE
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showSwapModal && (
-        <div className="bottom-sheet-overlay" onClick={() => setShowSwapModal(false)}>
-          <div className="bottom-sheet-content" onClick={event => event.stopPropagation()}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '10px' }}>Swap Future Allocations</h3>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>The active and completed blocks stay unchanged. Future placements are locked after the swap.</p>
-            {[{ value: selectedPlayerForChange, set: setSelectedPlayerForChange, label: 'FIRST PLAYER' }, { value: swapPlayerId, set: setSwapPlayerId, label: 'SECOND PLAYER' }].map(field => (
-              <label key={field.label} style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px' }}>
-                {field.label}
-                <select value={field.value} onChange={event => field.set(event.target.value)} style={{ width: '100%', padding: '8px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '4px' }}>
-                  <option value="">-- Choose Player --</option>
-                  {players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}
-                </select>
-              </label>
-            ))}
-            <button className="btn btn-gold" onClick={handleSwapPlayers} disabled={!selectedPlayerForChange || !swapPlayerId || selectedPlayerForChange === swapPlayerId}>SWAP FUTURE BLOCKS</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

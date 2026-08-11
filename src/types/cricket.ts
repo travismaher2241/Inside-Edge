@@ -272,6 +272,19 @@ export interface FieldPreset {
   positions: FieldPosition[];
 }
 
+export interface SavedFieldSetting {
+  id: string;
+  name: string;
+  batterHand: BattingHand;
+  bowlerStyle: 'pace' | 'spin';
+  tacticalPhase: TacticalPhase;
+  competitionRulesProfileId?: string;
+  positions: FieldSpot[];
+  matchId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ClubTeam {
   id: string;
   name: string;
@@ -428,6 +441,27 @@ export interface RotationBlockPlan {
   alerts: string[];
 }
 
+export type ClubSessionBlockType = 'warmup' | 'activity' | 'rotation' | 'centre_wicket' | 'review';
+
+export interface ClubSessionBlock {
+  id: string;
+  title: string;
+  type: ClubSessionBlockType;
+  durationMinutes: number;
+  objective: string;
+  location?: string;
+  activityId?: string;
+  rotation?: RotationBlockPlan;
+}
+
+export interface LiveSessionState {
+  activeBlockIndex: number;
+  activeRotationIndex: number;
+  secondsRemaining: number;
+  isPaused: boolean;
+  updatedAt: string;
+}
+
 export interface ClubTrainingSession {
   id: string;
   clubId: string;
@@ -448,8 +482,15 @@ export interface ClubTrainingSession {
   rotationPlan: RotationBlockPlan[];
   manualLocks: Record<string, boolean>; // e.g. `${blockIndex}_${resourceId}_${playerId}`
   fairnessSettings: { targetEqualBattingMinutes: number };
+  blocks: ClubSessionBlock[];
+  activeBlockIndex: number;
+  activeRotationIndex: number;
   status: 'draft' | 'planned' | 'live' | 'completed';
   warnings: string[];
+  rationale?: string;
+  completedAt?: string;
+  fairnessAppliedAt?: string;
+  currentLiveState?: LiveSessionState;
   actualParticipationOutcomes?: Record<string, { battingMinutes: number; deliveriesBowled: number; centreWicketOvers: number }>;
 }
 
@@ -485,6 +526,10 @@ export interface SavedClubTemplate {
   }>;
   rotationDurationMinutes: number;
   sessionObjectives: string[];
+  includedTeamIds?: string[];
+  resourceTypeRules?: TrainingResourceType[];
+  centreWicketSettings?: Partial<CentreWicketScenario>;
+  defaultStaffAllocation?: Array<{ staffId: string; role: string; assignedResourceId?: string }>;
 }
 
 
@@ -553,4 +598,3 @@ export interface SavedTacticalPlan {
   updatedAt: string;
   warnings: string[];
 }
-

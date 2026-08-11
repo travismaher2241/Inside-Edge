@@ -10,6 +10,19 @@ export interface TeamReportGroup {
   reports: MatchReport[];
 }
 
+export function getLatestReport(reports: MatchReport[]): MatchReport | undefined {
+  let latest: MatchReport | undefined;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const report of reports) {
+    const time = new Date(report.createdAt || report.matchDate).getTime();
+    if (!Number.isNaN(time) && time > latestTime) {
+      latest = report;
+      latestTime = time;
+    }
+  }
+  return latest;
+}
+
 /**
  * Filter match reports within the specified number of days up to referenceDate.
  */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ClubTeam, ClubTrainingSession, Player, PlayerAvailabilityRecord, StaffPlayerAssignment, TrainingResource } from '../src/types/cricket';
 import {
   calculateSessionFeasibility,
+  completeSessionWithFairness,
   generateClubRotationPlan,
   handleLiveNoShow,
   handleManualSwap,
@@ -73,6 +74,18 @@ describe('Club Training Planner engine', () => {
     });
   });
 
+  it('separates theoretical, staffable, allocated and unused capacity', () => {
+    const staffed = resource(1);
+    const unstaffed = { ...resource(2), id: 'unstaffed', name: 'Unstaffed net' };
+    const data = inputs(8, [staffed, unstaffed]);
+    data.teams[0].captainIds = ['p-1'];
+    const output = generateClubRotationPlan({ ...data, sessionObjectives: [], rotationBlockDurationMinutes: 10, sessionStartTime: '18:00', sessionFinishTime: '18:20' });
+    expect(output.capacityMetrics.theoreticalCapacityMinutes).toBe(80);
+    expect(output.capacityMetrics.staffableCapacityMinutes).toBeLessThanOrEqual(output.capacityMetrics.theoreticalCapacityMinutes);
+    expect(output.capacityMetrics.actuallyAllocatedCapacityMinutes).toBeLessThanOrEqual(output.capacityMetrics.theoreticalCapacityMinutes);
+    expect(output.capacityMetrics.unusedCapacityMinutes).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps player requests non-binding until staff explicitly assign priority', () => {
     const data = inputs(20);
     data.availability['p-10'].requestComment = 'Give me every batting turn';
@@ -97,7 +110,7 @@ describe('Club Training Planner engine', () => {
   it('preserves completed and active blocks during no-show recalculation', () => {
     const data = inputs(20);
     const output = generateClubRotationPlan({ ...data, sessionObjectives: [], rotationBlockDurationMinutes: 10, sessionStartTime: '18:00', sessionFinishTime: '19:00' });
-    const session: ClubTrainingSession = { id: 'session-1', clubId: 'club-1', title: 'Training', date: '2026-08-11', startTime: '18:00', finishTime: '19:00', venueFacilityId: 'facility-1', includedTeamIds: ['team-1'], availableResourceIds: data.resources.map(item => item.id), expectedPlayerIds: data.players.map(item => item.id), confirmedAttendingPlayerIds: data.players.map(item => item.id), availabilityRecords: data.availability, staffPlayerAssignments: data.staffAssignments, sessionObjectives: [], rotationDurationMinutes: 10, captainCoachAssignments: [], rotationPlan: output.rotationBlocks, manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 10 }, status: 'live', warnings: [] };
+    const session: ClubTrainingSession = { id: 'session-1', clubId: 'club-1', title: 'Training', date: '2026-08-11', startTime: '18:00', finishTime: '19:00', venueFacilityId: 'facility-1', includedTeamIds: ['team-1'], availableResourceIds: data.resources.map(item => item.id), expectedPlayerIds: data.players.map(item => item.id), confirmedAttendingPlayerIds: data.players.map(item => item.id), availabilityRecords: data.availability, staffPlayerAssignments: data.staffAssignments, sessionObjectives: [], rotationDurationMinutes: 10, captainCoachAssignments: [], rotationPlan: output.rotationBlocks, manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 10 }, blocks: [], activeBlockIndex: 0, activeRotationIndex: 0, status: 'live', warnings: [] };
     const updated = handleLiveNoShow(session, 'p-5', 1, data.players, data.teams, data.resources);
     expect(updated.rotationPlan).toHaveLength(session.rotationPlan.length);
     expect(updated.rotationPlan.slice(0, 2)).toEqual(session.rotationPlan.slice(0, 2));
@@ -116,5 +129,16 @@ describe('Club Training Planner engine', () => {
   it('accumulates missed-turn fairness credit', () => {
     const ledger = updateRollingFairnessLedger([], [{ sessionId: 's', date: '2026-08-11', playerId: 'p-1', plannedBattingMinutes: 5, actualBattingMinutes: 5, extraBattingMinutesGranted: 0, deliveriesBowled: 12, centreWicketOvers: 0, missedOrShortenedMinutes: 7 }]);
     expect(ledger[0].accumulatedFairnessCreditMinutes).toBe(7);
+  });
+
+  it('applies completion fairness exactly once', () => {
+    const data = inputs(12, [resource(1)]);
+    const output = generateClubRotationPlan({ ...data, sessionObjectives: [], rotationBlockDurationMinutes: 10, sessionStartTime: '18:00', sessionFinishTime: '18:20' });
+    const session: ClubTrainingSession = { id: 'complete-once', clubId: 'club', title: 'Training', date: '2026-08-11', startTime: '18:00', finishTime: '18:20', venueFacilityId: 'f', includedTeamIds: ['team-1'], availableResourceIds: ['r-1'], expectedPlayerIds: data.players.map(item => item.id), confirmedAttendingPlayerIds: data.players.map(item => item.id), availabilityRecords: data.availability, staffPlayerAssignments: data.staffAssignments, sessionObjectives: [], rotationDurationMinutes: 10, captainCoachAssignments: [], rotationPlan: output.rotationBlocks, manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 10 }, blocks: [], activeBlockIndex: 0, activeRotationIndex: 0, status: 'live', warnings: [] };
+    const first = completeSessionWithFairness(session, data.players, []);
+    const second = completeSessionWithFairness(first.session, data.players, first.ledger);
+    expect(first.applied).toBe(true);
+    expect(second.applied).toBe(false);
+    expect(second.ledger).toEqual(first.ledger);
   });
 });

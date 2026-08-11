@@ -1,5 +1,6 @@
-import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from '../types/cricket';
+import type { Team, Facility, Player, Activity, TrainingSession, MatchRecord, DevelopmentFocus, Observation, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan, SavedFieldSetting, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate } from '../types/cricket';
 import { SEED_TEAM, SEED_FACILITY, SEED_PLAYERS, SEED_ACTIVITIES, SEED_SESSION, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_RULES_PROFILES, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_SAVED_TEMPLATES, SEED_FAIRNESS_LEDGER } from '../modules/cricket/seedData';
+import { migrateTrainingSession, SESSION_MIGRATION_KEY, SESSION_MIGRATION_VERSION } from '../modules/cricket/sessionModel';
 
 const STORAGE_KEYS = {
   TEAM: 'inside_edge_team_v1',
@@ -14,11 +15,14 @@ const STORAGE_KEYS = {
   OPPOSITION_BATTERS: 'inside_edge_opposition_batters_v1',
   RULES_PROFILES: 'inside_edge_rules_profiles_v1',
   SAVED_PLANS: 'inside_edge_saved_plans_v1',
+  SAVED_FIELD_SETTINGS: 'inside_edge_saved_field_settings_v1',
   CLUB_TEAMS: 'inside_edge_club_teams_v2',
   TRAINING_RESOURCES: 'inside_edge_training_resources_v1',
   CLUB_SESSIONS: 'inside_edge_club_sessions_v1',
   FAIRNESS_LEDGER: 'inside_edge_fairness_ledger_v1',
   SAVED_TEMPLATES: 'inside_edge_saved_templates_v1',
+  CURRENT_CLUB_SESSION_ID: 'inside_edge_current_club_session_id_v1',
+  SESSION_MIGRATION: SESSION_MIGRATION_KEY,
 };
 
 const memoryStore: Record<string, string> = {};
@@ -65,9 +69,7 @@ export const StorageEngine = {
     if (!hasKey(STORAGE_KEYS.ACTIVITIES)) {
       setItem(STORAGE_KEYS.ACTIVITIES, SEED_ACTIVITIES);
     }
-    if (!hasKey(STORAGE_KEYS.SESSION)) {
-      setItem(STORAGE_KEYS.SESSION, SEED_SESSION);
-    }
+    const hadLegacySession = hasKey(STORAGE_KEYS.SESSION);
     if (!hasKey(STORAGE_KEYS.MATCHES)) {
       // Check legacy single match key if present
       const legacyMatch = typeof localStorage !== 'undefined' ? localStorage.getItem('inside_edge_match_v1') : memoryStore['inside_edge_match_v1'];
@@ -100,6 +102,7 @@ export const StorageEngine = {
     if (!hasKey(STORAGE_KEYS.SAVED_PLANS)) {
       setItem(STORAGE_KEYS.SAVED_PLANS, []);
     }
+    if (!hasKey(STORAGE_KEYS.SAVED_FIELD_SETTINGS)) setItem(STORAGE_KEYS.SAVED_FIELD_SETTINGS, []);
     if (!hasKey(STORAGE_KEYS.CLUB_TEAMS)) {
       const legacyTeam = getItem(STORAGE_KEYS.TEAM, SEED_TEAM);
       setItem(STORAGE_KEYS.CLUB_TEAMS, [{
@@ -142,6 +145,29 @@ export const StorageEngine = {
     if (!hasKey(STORAGE_KEYS.CLUB_SESSIONS)) {
       setItem(STORAGE_KEYS.CLUB_SESSIONS, []);
     }
+    if (!hasKey(STORAGE_KEYS.SESSION_MIGRATION)) {
+      const existingSessions = getItem<ClubTrainingSession[]>(STORAGE_KEYS.CLUB_SESSIONS, []);
+      if (existingSessions.length > 0) {
+        setItem(STORAGE_KEYS.SESSION_MIGRATION, SESSION_MIGRATION_VERSION);
+      } else if (!hadLegacySession) {
+        setItem(STORAGE_KEYS.SESSION_MIGRATION, SESSION_MIGRATION_VERSION);
+      } else {
+        try {
+          const legacy = getItem<TrainingSession | null>(STORAGE_KEYS.SESSION, null);
+          if (legacy && typeof legacy.id === 'string' && Array.isArray(legacy.blocks)) {
+            const teamIds = getItem<ClubTeam[]>(STORAGE_KEYS.CLUB_TEAMS, []).slice(0, 1).map(team => team.id);
+            const migrated = migrateTrainingSession(legacy, 'default-club', teamIds);
+            setItem(STORAGE_KEYS.CLUB_SESSIONS, [migrated]);
+            setItem(STORAGE_KEYS.CURRENT_CLUB_SESSION_ID, migrated.id);
+            setItem(STORAGE_KEYS.SESSION_MIGRATION, SESSION_MIGRATION_VERSION);
+          }
+        } catch (error) {
+          console.error('Legacy session migration failed; the legacy entry was preserved.', error);
+        }
+      }
+    }
+    // Retained for rollback compatibility. It is no longer read by application views.
+    if (!hadLegacySession) setItem(STORAGE_KEYS.SESSION, SEED_SESSION);
     if (!hasKey(STORAGE_KEYS.SAVED_TEMPLATES)) {
       setItem(STORAGE_KEYS.SAVED_TEMPLATES, SEED_SAVED_TEMPLATES);
     }
@@ -317,6 +343,14 @@ export const StorageEngine = {
     const filtered = list.filter(p => p.id !== id);
     setItem(STORAGE_KEYS.SAVED_PLANS, filtered);
   },
+  getSavedFieldSettings: (): SavedFieldSetting[] => getItem<SavedFieldSetting[]>(STORAGE_KEYS.SAVED_FIELD_SETTINGS, []),
+  saveFieldSetting: (setting: SavedFieldSetting) => {
+    const list = StorageEngine.getSavedFieldSettings();
+    const index = list.findIndex(item => item.id === setting.id);
+    if (index >= 0) list[index] = setting; else list.unshift(setting);
+    setItem(STORAGE_KEYS.SAVED_FIELD_SETTINGS, list);
+  },
+  deleteFieldSetting: (id: string) => setItem(STORAGE_KEYS.SAVED_FIELD_SETTINGS, StorageEngine.getSavedFieldSettings().filter(item => item.id !== id)),
 
   // Dynamic Club Teams CRUD
   getClubTeams: (): ClubTeam[] => getItem(STORAGE_KEYS.CLUB_TEAMS, SEED_CLUB_TEAMS),
@@ -371,6 +405,8 @@ export const StorageEngine = {
     const list = StorageEngine.getClubSessions();
     return list.find(s => s.id === id);
   },
+  getCurrentClubSessionId: (): string | undefined => getItem<string | undefined>(STORAGE_KEYS.CURRENT_CLUB_SESSION_ID, undefined),
+  setCurrentClubSessionId: (id: string) => setItem(STORAGE_KEYS.CURRENT_CLUB_SESSION_ID, id),
   savePlayerAvailability: (sessionId: string, record: ClubTrainingSession['availabilityRecords'][string]) => {
     const session = StorageEngine.getClubSession(sessionId);
     if (!session) return;
@@ -413,4 +449,3 @@ export const StorageEngine = {
     StorageEngine.saveSavedTemplates(list);
   },
 };
-

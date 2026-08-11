@@ -10,12 +10,16 @@ import { db, isFirebaseConfigured } from '../../lib/firebase';
 import type { ClubTeam, MatchReport } from '../../types/cricket';
 
 // Local storage fallback keys for dev/testing when Firebase env is not configured
-const LOCAL_STORAGE_TEAMS_KEY = 'inside_edge_club_teams';
+const LOCAL_STORAGE_TEAMS_KEY = 'inside_edge_club_teams_v2';
 const LOCAL_STORAGE_REPORTS_KEY = 'inside_edge_match_reports';
+const memoryFallback = new Map<string, string>();
+
+const readLocal = (key: string) => typeof localStorage === 'undefined' ? memoryFallback.get(key) ?? null : localStorage.getItem(key);
+const writeLocal = (key: string, value: string) => typeof localStorage === 'undefined' ? void memoryFallback.set(key, value) : localStorage.setItem(key, value);
 
 function getLocalTeams(): ClubTeam[] {
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_TEAMS_KEY);
+    const raw = readLocal(LOCAL_STORAGE_TEAMS_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {
     console.error('Failed to read local teams', e);
@@ -37,19 +41,19 @@ function getLocalTeams(): ClubTeam[] {
       createdAt: new Date().toISOString()
     }
   ];
-  localStorage.setItem(LOCAL_STORAGE_TEAMS_KEY, JSON.stringify(seed));
+  writeLocal(LOCAL_STORAGE_TEAMS_KEY, JSON.stringify(seed));
   return seed;
 }
 
 function saveLocalTeam(team: ClubTeam): void {
   const current = getLocalTeams();
-  const updated = [...current, team];
-  localStorage.setItem(LOCAL_STORAGE_TEAMS_KEY, JSON.stringify(updated));
+  const updated = [...current.filter(item => item.id !== team.id), team];
+  writeLocal(LOCAL_STORAGE_TEAMS_KEY, JSON.stringify(updated));
 }
 
 function getLocalReports(): MatchReport[] {
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_REPORTS_KEY);
+    const raw = readLocal(LOCAL_STORAGE_REPORTS_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {
     console.error('Failed to read local reports', e);
@@ -60,7 +64,7 @@ function getLocalReports(): MatchReport[] {
 function saveLocalReport(report: MatchReport): void {
   const current = getLocalReports();
   const updated = [report, ...current];
-  localStorage.setItem(LOCAL_STORAGE_REPORTS_KEY, JSON.stringify(updated));
+  writeLocal(LOCAL_STORAGE_REPORTS_KEY, JSON.stringify(updated));
 }
 
 /**
@@ -71,7 +75,7 @@ export async function getTeamByToken(token: string): Promise<ClubTeam | null> {
 
   if (isFirebaseConfigured) {
     try {
-      const q = query(collection(db, 'teams'), where('submissionToken', '==', token));
+      const q = query(collection(db, 'clubTeams'), where('submissionToken', '==', token));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const docSnap = snap.docs[0];
@@ -80,7 +84,7 @@ export async function getTeamByToken(token: string): Promise<ClubTeam | null> {
           ...docSnap.data()
         } as ClubTeam;
       }
-      return null;
+      // An empty cloud collection is normal in local/test operation; continue to the safe fallback.
     } catch (err) {
       console.warn('Firestore query error, falling back to local teams:', err);
     }
@@ -101,6 +105,19 @@ export async function submitMatchReport(
 
   if (isFirebaseConfigured) {
     try {
+      const teamQuery = query(collection(db, 'clubTeams'), where('submissionToken', '==', reportData.submissionToken));
+      const teamSnapshot = await getDocs(teamQuery);
+      // A team supplied by the documented local fallback does not exist in the
+      // cloud collection, so its report must remain in the same local data path.
+      if (teamSnapshot.empty) {
+        const localReport: MatchReport = {
+          id: `rep-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          ...reportData,
+          createdAt
+        };
+        saveLocalReport(localReport);
+        return localReport;
+      }
       const payload = {
         ...reportData,
         createdAt
@@ -132,7 +149,7 @@ export async function submitMatchReport(
 export async function getClubTeams(): Promise<ClubTeam[]> {
   if (isFirebaseConfigured) {
     try {
-      const snap = await getDocs(collection(db, 'teams'));
+      const snap = await getDocs(collection(db, 'clubTeams'));
       const teams: ClubTeam[] = [];
       snap.forEach(docSnap => {
         teams.push({
@@ -165,7 +182,7 @@ export async function createClubTeam(name: string, ageGroup: string): Promise<Cl
 
   if (isFirebaseConfigured) {
     try {
-      const docRef = await addDoc(collection(db, 'teams'), newTeamData);
+      const docRef = await addDoc(collection(db, 'clubTeams'), newTeamData);
       return {
         id: docRef.id,
         ...newTeamData
@@ -198,7 +215,9 @@ export async function getMatchReports(): Promise<MatchReport[]> {
           ...docSnap.data()
         } as MatchReport);
       });
-      return reports;
+      if (reports.length > 0) return reports;
+      // Keep reports and teams on the same fallback path when the configured
+      // project has not yet been seeded.
     } catch (err) {
       console.warn('Failed to fetch match reports from Firestore, using local storage:', err);
     }

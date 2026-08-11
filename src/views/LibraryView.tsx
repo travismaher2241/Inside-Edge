@@ -1,130 +1,68 @@
-// Activity Library & Problem-Based Search View for Inside Edge
-
 import React, { useState } from 'react';
 import type { Activity } from '../types/cricket';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
 interface LibraryViewProps {
   activities: Activity[];
   onAddActivityToSession: (activity: Activity) => void;
+  addedActivityIds?: string[];
+  onUndoAddActivity?: (activityId: string) => void;
 }
 
-export const LibraryView: React.FC<LibraryViewProps> = ({
-  activities,
-  onAddActivityToSession
-}) => {
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+export const LibraryView: React.FC<LibraryViewProps> = ({ activities, onAddActivityToSession, addedActivityIds = [], onUndoAddActivity }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [spaceFilter, setSpaceFilter] = useState('all');
+  const [maxDuration, setMaxDuration] = useState(60);
+  const [playerCount, setPlayerCount] = useState(0);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [lastAdded, setLastAdded] = useState<Activity | null>(null);
 
-  const filteredActivities = activities.filter(act => {
-    const matchesQuery = searchQuery === '' || 
-      act.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      act.purpose.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      act.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesCat = selectedCategory === 'ALL' || act.category === selectedCategory;
-
-    return matchesQuery && matchesCat;
+  const filteredActivities = activities.filter(activity => {
+    const query = searchQuery.trim().toLowerCase();
+    return (!query || `${activity.name} ${activity.purpose} ${activity.tags.join(' ')}`.toLowerCase().includes(query))
+      && (selectedCategory === 'ALL' || activity.category === selectedCategory)
+      && (spaceFilter === 'all' || activity.spaceRequired === spaceFilter)
+      && activity.durationMinutes <= maxDuration
+      && (!playerCount || (activity.minPlayers <= playerCount && activity.maxPlayers >= playerCount));
   });
+
+  const add = (activity: Activity) => {
+    onAddActivityToSession(activity);
+    setLastAdded(activity);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Header */}
-      <div>
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>CURATED COACHING CONTENT</div>
-        <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Activity Library ({activities.length})</h1>
+      <div><div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>COACHING CONTENT</div><h1 style={{ fontSize: '1.4rem' }}>Activity library ({activities.length})</h1></div>
+      <label style={{ position: 'relative' }}><span className="sr-only">Search activities</span><Search size={18} style={{ position: 'absolute', left: '12px', top: '18px' }} /><input type="search" placeholder="Search activity, purpose or tag" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} style={{ paddingLeft: '40px' }} /></label>
+      <div className="library-filters">
+        <label>Category<select value={selectedCategory} onChange={event => setSelectedCategory(event.target.value)}><option>ALL</option>{['Batting','Bowling','Fielding','Wicketkeeping','Tactical','Physical','Team'].map(value => <option key={value}>{value}</option>)}</select></label>
+        <label>Space<select value={spaceFilter} onChange={event => setSpaceFilter(event.target.value)}><option value="all">All spaces</option><option value="net">Net</option><option value="pitch">Centre wicket</option><option value="outfield">Outfield</option><option value="small_grid">Small grid</option><option value="indoor">Indoor</option></select></label>
+        <label>Maximum duration<input type="number" min={5} value={maxDuration} onChange={event => setMaxDuration(Number(event.target.value))} /></label>
+        <label>Players<input type="number" min={0} placeholder="Any" value={playerCount || ''} onChange={event => setPlayerCount(Number(event.target.value))} /></label>
       </div>
 
-      {/* Problem-Based Search Bar */}
-      <div style={{ position: 'relative' }}>
-        <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-        <input
-          type="text"
-          placeholder="Search by coaching problem (e.g. 'spin', 'new ball', 'death')..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '12px 12px 12px 40px',
-            background: 'var(--bg-surface-card)',
-            border: '1px solid var(--border-light)',
-            borderRadius: '10px',
-            color: 'var(--text-main)',
-            fontSize: '0.85rem'
-          }}
-        />
+      <div className="library-grid">
+        {filteredActivities.map(activity => {
+          const added = addedActivityIds.includes(activity.id);
+          return <article key={activity.id} className="card" style={{ display: 'grid', gap: '8px', alignContent: 'start' }}>
+            <div><span className="badge badge-gold">{activity.category}</span><h2 style={{ fontSize: '1.05rem', marginTop: '6px' }}>{activity.name}</h2></div>
+            <p style={{ color: 'var(--text-secondary)' }}>{activity.purpose}</p>
+            <div style={{ fontSize: '0.78rem' }}>{activity.durationMinutes} min · {activity.spaceRequired.replace('_',' ')} · {activity.minPlayers}–{activity.maxPlayers} players · {activity.participationDensity} density</div>
+            <div style={{ display: 'flex', gap: '8px' }}><button className="btn btn-secondary" onClick={() => setSelectedActivity(activity)}>Details</button><button className="btn btn-primary" disabled={added} onClick={() => add(activity)}>{added ? 'Added' : 'Add'}</button></div>
+          </article>;
+        })}
       </div>
+      {filteredActivities.length === 0 && <div className="card">No activities match these filters.</div>}
 
-      {/* Category Pills */}
-      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {['ALL', 'Batting', 'Bowling', 'Fielding', 'Tactical'].map(cat => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '9999px',
-              border: selectedCategory === cat ? '1px solid var(--accent-gold)' : '1px solid var(--border-light)',
-              background: selectedCategory === cat ? 'var(--accent-gold-soft)' : 'var(--bg-surface-elevated)',
-              color: selectedCategory === cat ? 'var(--accent-gold)' : 'var(--text-secondary)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      {selectedActivity && <div className="bottom-sheet-overlay" onClick={() => setSelectedActivity(null)}><div role="dialog" aria-modal="true" aria-labelledby="activity-detail-title" className="bottom-sheet-content" onClick={event => event.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><h2 id="activity-detail-title">{selectedActivity.name}</h2><button aria-label="Close activity details" className="btn btn-secondary" onClick={() => setSelectedActivity(null)} style={{ width: 'auto' }}><X size={20} /></button></div>
+        {[['Setup', selectedActivity.setupSteps], ['Coaching points', selectedActivity.coachingPoints], ['Constraints', selectedActivity.constraints], ['Progressions', selectedActivity.progressions], ['Equipment', selectedActivity.equipment], ['Safety', selectedActivity.safetyNotes ? [selectedActivity.safetyNotes] : []]].map(([title, values]) => <section key={title as string} style={{ marginTop: '14px' }}><h3>{title}</h3>{(values as string[]).length ? <ul style={{ paddingLeft: '20px' }}>{(values as string[]).map(value => <li key={value}>{value}</li>)}</ul> : <p style={{ color: 'var(--text-secondary)' }}>None specified.</p>}</section>)}
+        <button className="btn btn-primary" disabled={addedActivityIds.includes(selectedActivity.id)} onClick={() => add(selectedActivity)}>{addedActivityIds.includes(selectedActivity.id) ? 'Added' : 'Add to current session'}</button>
+      </div></div>}
 
-      {/* Activity Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {filteredActivities.map(act => (
-          <div key={act.id} className="card" style={{ borderLeft: '4px solid var(--primary-green-light)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <span className="badge badge-gold">[{act.category}] {act.durationMinutes} MINS</span>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '4px' }}>{act.name}</h3>
-              </div>
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  onAddActivityToSession(act);
-                }}
-                style={{ width: 'auto', height: '34px', fontSize: '0.75rem' }}
-              >
-                + ADD TO SESSION
-              </button>
-            </div>
-
-            <div style={{ fontSize: '0.8rem', color: 'var(--accent-gold)', marginTop: '6px', fontWeight: 600 }}>
-              Purpose: {act.purpose}
-            </div>
-
-            {/* Coaching Points */}
-            <div style={{ marginTop: '10px', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                COACHING CUES (3-6 POINTS)
-              </div>
-              <ul style={{ paddingLeft: '16px', fontSize: '0.78rem', color: 'var(--text-main)' }}>
-                {act.coachingPoints.map((point, i) => (
-                  <li key={i}>{point}</li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Tags & Constraints */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '10px' }}>
-              {act.tags.map(t => (
-                <span key={t} style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                  #{t}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      {lastAdded && <div role="status" className="card" style={{ position: 'sticky', bottom: '80px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>{lastAdded.name} added.</span><button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => { onUndoAddActivity?.(lastAdded.id); setLastAdded(null); }}>Undo</button></div>}
     </div>
   );
 };

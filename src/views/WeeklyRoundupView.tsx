@@ -5,12 +5,13 @@ import {
   filterReportsByDateRange,
   aggregateTagFrequencies,
   groupReportsByTeam,
-  getTopRecurringIssues
+  getTopRecurringIssues,
+  getLatestReport
 } from '../modules/cricket/roundupAggregation';
 import { ClubTeamManager } from '../components/cricket/ClubTeamManager';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { FirebaseNotConfiguredBanner } from '../components/cricket/FirebaseNotConfiguredBanner';
-import { Calendar, Filter, Zap, CheckSquare, Square, FileText, AlertCircle, RefreshCw, Users } from 'lucide-react';
+import { Calendar, Filter, Zap, CheckSquare, Square, FileText, AlertCircle, RefreshCw, Clock, Users } from 'lucide-react';
 
 interface WeeklyRoundupViewProps {
   onApplyPrioritiesToSession: (priorities: string[]) => void;
@@ -21,6 +22,8 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const [allReports, setAllReports] = useState<MatchReport[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [daysLimit, setDaysLimit] = useState<number>(7);
+  const [missingReportsOnly, setMissingReportsOnly] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<string>('');
   const [isTeamManagerOpen, setIsTeamManagerOpen] = useState<boolean>(false);
 
   // Selected recurring issues to apply to session
@@ -74,18 +77,19 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const teamGroups = useMemo(() => {
     return groupReportsByTeam(teams, reportsInRange);
   }, [teams, reportsInRange]);
+  const visibleTeamGroups = useMemo(
+    () => missingReportsOnly ? teamGroups.filter(group => group.reports.length === 0) : teamGroups,
+    [missingReportsOnly, teamGroups]
+  );
 
   const handleTogglePriority = (issue: string) => {
-    if (selectedPriorities.includes(issue)) {
-      setSelectedPriorities(selectedPriorities.filter(p => p !== issue));
-    } else {
-      setSelectedPriorities([...selectedPriorities, issue]);
-    }
+    setSelectedPriorities(current => current.includes(issue) ? current.filter(priority => priority !== issue) : [...current, issue]);
   };
 
   const handleApplyToSession = () => {
     if (selectedPriorities.length === 0) return;
     onApplyPrioritiesToSession(selectedPriorities);
+    setFeedback(`${selectedPriorities.length} priorities applied to the current session.`);
   };
 
   return (
@@ -108,6 +112,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Filter style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }} />
             <select
+              aria-label="Report date range"
               value={daysLimit}
               onChange={e => setDaysLimit(Number(e.target.value))}
               style={{
@@ -128,7 +133,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
               type="button"
               onClick={loadData}
               className="btn btn-secondary"
-              title="Refresh Reports"
+              aria-label="Refresh reports"
               style={{ width: 'auto', minHeight: '34px', padding: '0 10px' }}
             >
               <RefreshCw style={{ width: '14px', height: '14px' }} className={loading ? 'animate-spin' : ''} />
@@ -136,6 +141,8 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
           </div>
         </div>
       </div>
+
+      {feedback && <div className="card" role="status" style={{ padding: '10px 14px', color: '#4ade80' }}>{feedback}</div>}
 
       {/* Top Recurring Issues & Session Priority Generator */}
       <div className="card" style={{
@@ -174,10 +181,13 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
             {tagFrequencies.slice(0, 5).map(tf => {
               const selected = selectedPriorities.includes(tf.tag);
               return (
-                <div
+                <button
+                  type="button"
                   key={tf.tag}
                   onClick={() => handleTogglePriority(tf.tag)}
+                  aria-pressed={selected}
                   style={{
+                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -202,7 +212,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                   <span className="badge badge-gold" style={{ fontSize: '0.7rem' }}>
                     {tf.count} {tf.count === 1 ? 'Report' : 'Reports'}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -211,10 +221,15 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
 
       {/* Reports List Grouped by Team */}
       <div className="card" style={{ padding: '20px' }}>
-        <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <FileText style={{ width: '20px', height: '20px', color: 'var(--primary-green-light)' }} />
-          Team Post-Match Reports
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FileText style={{ width: '20px', height: '20px', color: 'var(--primary-green-light)' }} />
+            Reports by team
+          </h2>
+          <button type="button" className="btn btn-secondary" aria-pressed={missingReportsOnly} onClick={() => setMissingReportsOnly(value => !value)} style={{ width: 'auto', minHeight: '38px', padding: '0 12px' }}>
+            {missingReportsOnly ? 'Show all teams' : `Missing reports (${teamGroups.filter(group => group.reports.length === 0).length})`}
+          </button>
+        </div>
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
@@ -224,9 +239,13 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
           <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
             No club teams defined. Please add club teams below.
           </div>
+        ) : visibleTeamGroups.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Every team has submitted a report in this date range.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {teamGroups.map(({ team, reports }) => (
+            {visibleTeamGroups.map(({ team, reports }) => {
+              const latestReport = getLatestReport(reports);
+              return (
               <div
                 key={team.id}
                 style={{
@@ -242,7 +261,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                     <span className="badge badge-green" style={{ fontSize: '0.68rem' }}>{team.ageGroup}</span>
                   </div>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    {reports.length} {reports.length === 1 ? 'Submission' : 'Submissions'}
+                    {latestReport ? <><Clock size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />Last submitted {new Date(latestReport.createdAt).toLocaleString()}</> : 'Awaiting report'}
                   </span>
                 </div>
 
@@ -312,7 +331,8 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -353,7 +373,7 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                 ✕
               </button>
             </div>
-            <ClubTeamManager />
+            <ClubTeamManager reports={allReports} />
           </div>
         </div>
       )}
