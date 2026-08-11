@@ -127,7 +127,12 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
   // Legality Calculations & Validation
   const countKeeper = positions.filter(p => p.id === 'wk').length;
-  const countOutsideCircle = positions.filter(p => p.depth === 'outfield' || p.depth === 'boundary' || Math.sqrt(Math.pow(p.x - 50, 2) + Math.pow(p.y - 50, 2)) > 32).length;
+  // Trust each position's own `depth` label rather than re-deriving it from raw
+  // coordinates: authored presets tag depth directly (fieldPresets.ts), and a
+  // dragged fielder already gets its depth recomputed geometrically in
+  // handlePointerMove above. Recomputing again here from x/y disagreed with the
+  // authored labels for several shipped presets and flagged them illegal on load.
+  const countOutsideCircle = positions.filter(p => p.depth === 'outfield' || p.depth === 'boundary').length;
   const countBehindSquareLeg = positions.filter(p => p.behindSquareLeg && p.id !== 'wk').length;
   const countLegSideTotal = positions.filter(p => p.side === 'leg' && p.id !== 'wk').length;
 
