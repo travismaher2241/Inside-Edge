@@ -8,7 +8,7 @@ import {
   type CoachProfileLoadError
 } from './modules/cricket/authService';
 import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
-import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting } from './types/cricket';
+import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting, ActiveScope } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
@@ -50,6 +50,9 @@ export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [isLiveMode, setIsLiveMode] = useState<boolean>(false);
   const [isFieldBoardOpen, setIsFieldBoardOpen] = useState<boolean>(false);
+
+  // Active Scope State (Team vs Club Context)
+  const [activeScope, setActiveScope] = useState<ActiveScope>({ mode: 'team', teamId: 'ct-1' });
 
   // Firestore Real-Time Squad Data State
   const [team, setTeam] = useState<Team>(SEED_TEAM);
@@ -369,6 +372,10 @@ export function App() {
       activeTab={activeTab}
       onSelectTab={setActiveTab}
       team={team}
+      clubTeams={clubTeams}
+      totalPlayersCount={players.length}
+      activeScope={activeScope}
+      onSelectScope={setActiveScope}
       onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
       currentCoach={effectiveCoachProfile}
       onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
@@ -384,6 +391,8 @@ export function App() {
           focuses={focuses}
           resources={trainingResources}
           team={team}
+          clubTeams={clubTeams}
+          activeScope={activeScope}
           onStartLiveSession={() => { if (currentClubSession) setIsLiveMode(true); }}
           onNavigateToTrain={() => setActiveTab('train')}
           onNavigateToMatch={() => setActiveTab('match')}
@@ -396,6 +405,7 @@ export function App() {
         <TrainView
           players={players}
           clubTeams={clubTeams}
+          activeScope={activeScope}
           trainingResources={trainingResources}
           currentSession={currentClubSession}
           fairnessLedger={fairnessLedger}
@@ -413,6 +423,8 @@ export function App() {
       {activeTab === 'team' && (
         <TeamView
           players={players}
+          clubTeams={clubTeams}
+          activeScope={activeScope}
           focuses={focuses}
           observations={observations}
           session={currentClubSession}
@@ -430,6 +442,8 @@ export function App() {
         <MatchView
           matches={matches}
           players={players}
+          clubTeams={clubTeams}
+          activeScope={activeScope}
           selectedMatchId={activeMatch?.id}
           onSelectMatch={setSelectedMatchId}
           onAddMatch={handleAddMatch}

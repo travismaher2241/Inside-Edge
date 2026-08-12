@@ -15,9 +15,13 @@ import { FieldBoardModal } from '../components/cricket/FieldBoardModal';
 const WeeklyRoundupView = lazy(() => import('./WeeklyRoundupView').then(m => ({ default: m.WeeklyRoundupView })));
 const MatchCreationModal = lazy(() => import('../components/cricket/MatchCreationModal').then(m => ({ default: m.MatchCreationModal })));
 
+import type { ClubTeam, ActiveScope } from '../types/cricket';
+
 interface MatchViewProps {
   matches: MatchRecord[];
   players?: Player[];
+  clubTeams?: ClubTeam[];
+  activeScope?: ActiveScope;
   selectedMatchId?: string;
   onSelectMatch: (matchId: string) => void;
   onAddMatch: (match: MatchRecord) => void;
@@ -28,6 +32,8 @@ interface MatchViewProps {
 export const MatchView: React.FC<MatchViewProps> = ({
   matches,
   players = [],
+  clubTeams: _clubTeams = [],
+  activeScope: _activeScope = { mode: 'team', teamId: 'ct-1' },
   selectedMatchId,
   onSelectMatch,
   onAddMatch,

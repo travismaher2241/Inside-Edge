@@ -1,7 +1,8 @@
 import React from 'react';
-import type { ClubTrainingSession, DevelopmentFocus, MatchRecord, Player, TrainingResource, Team } from '../types/cricket';
-import { ChevronRight, Dumbbell, Play, Sparkles, Trophy, Users, BookOpen, Clock } from 'lucide-react';
+import type { ClubTrainingSession, DevelopmentFocus, MatchRecord, Player, TrainingResource, Team, ClubTeam, ActiveScope } from '../types/cricket';
+import { ChevronRight, Dumbbell, Play, Sparkles, Trophy, Users, BookOpen, Shield, ShieldAlert } from 'lucide-react';
 import { calculateSessionReadiness, getSessionDuration } from '../modules/cricket/sessionModel';
+import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
 
 export interface HomeViewProps {
   session?: ClubTrainingSession;
@@ -12,6 +13,8 @@ export interface HomeViewProps {
   focuses: DevelopmentFocus[];
   resources: TrainingResource[];
   team?: Team;
+  clubTeams?: ClubTeam[];
+  activeScope?: ActiveScope;
   onStartLiveSession: () => void;
   onNavigateToTrain: () => void;
   onNavigateToMatch: () => void;
@@ -88,7 +91,8 @@ export const deriveHomeState = ({
   players = [],
   focuses = [],
   resources = [],
-  team
+  team,
+  activeScope = { mode: 'team', teamId: 'ct-1' }
 }: {
   session?: ClubTrainingSession;
   match?: MatchRecord;
@@ -98,23 +102,22 @@ export const deriveHomeState = ({
   focuses?: DevelopmentFocus[];
   resources?: TrainingResource[];
   team?: Team;
+  activeScope?: ActiveScope;
 }) => {
   const todayStr = getTodayIsoDate();
   const teamName = team?.name || 'Senior Men';
+  const scopePlayers = getPlayersForScope(players, activeScope);
 
-  // Consolidate match records
   const allMatches = [...matches];
   if (match && !allMatches.some(m => m.id === match.id)) {
     allMatches.push(match);
   }
 
-  // Consolidate session records
   const allSessions = [...sessions];
   if (session && !allSessions.some(s => s.id === session.id)) {
     allSessions.unshift(session);
   }
 
-  // 1. Determine Primary Context Card State
   const activeLiveSession = allSessions.find(s => s.status === 'live' || (s.currentLiveState && !s.currentLiveState.isPaused));
   const todayMatch = allMatches.find(m => m.date === todayStr);
   const todaySession = allSessions.find(s => s.date === todayStr && s.status !== 'completed');
@@ -152,12 +155,10 @@ export const deriveHomeState = ({
     primaryContextType = 'NO_SESSION';
   }
 
-  // 2. Derive Coaching Notes ("Worth a Look") — HIGH PRIORITY & DEDUPLICATED
   const coachingNotes: CoachingNoteItem[] = [];
   const playersWithAttention = new Set<string>();
 
-  // Workload restriction & high priority player notes
-  players.forEach(p => {
+  scopePlayers.forEach(p => {
     if (p.workloadRestriction?.restrictedBowler) {
       playersWithAttention.add(p.id);
       const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
@@ -175,7 +176,6 @@ export const deriveHomeState = ({
     }
   });
 
-  // Session readiness notes
   if (primarySession) {
     const readiness = calculateSessionReadiness(primarySession, resources);
     if (readiness.missing.length > 0) {
@@ -192,14 +192,10 @@ export const deriveHomeState = ({
   const totalCoachingNotesCount = coachingNotes.length;
   const limitedCoachingNotes = coachingNotes.slice(0, 3);
 
-  // 3. Derive Player Focus items — NORMAL PRIORITY & EXCLUDES PLAYERS ALREADY IN WORTH A LOOK
   const playerFocusItems: PlayerFocusItem[] = [];
-  players.forEach(p => {
-    // DO NOT duplicate players who already appear in Worth a Look!
+  scopePlayers.forEach(p => {
     if (playersWithAttention.has(p.id)) return;
-
     const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
-
     if (playerFocuses.length > 0) {
       playerFocusItems.push({
         id: `pf-${p.id}`,
@@ -214,7 +210,6 @@ export const deriveHomeState = ({
   const totalPlayerFocusCount = playerFocusItems.length;
   const limitedPlayerFocusItems = playerFocusItems.slice(0, 3);
 
-  // 4. Adapt Quick Actions to Context (Prevent duplicate Plan Training CTA)
   let quickActions: QuickActionItem[] = [];
   if (primaryContextType === 'NO_SESSION') {
     quickActions = [
@@ -232,9 +227,7 @@ export const deriveHomeState = ({
     ];
   }
 
-  // 5. Derive Up Next items (max 2)
   const upNextItems: UpNextItem[] = [];
-
   allSessions
     .filter(s => s.status !== 'completed' && s.id !== primarySession?.id)
     .forEach(s => {
@@ -267,11 +260,7 @@ export const deriveHomeState = ({
       }
     });
 
-  const limitedUpNextItems = upNextItems.slice(0, 2);
-
-  // 6. Derive Recent Activity (max 1-2)
   const recentActivityItems: RecentActivityItem[] = [];
-
   allSessions
     .filter(s => s.status === 'completed')
     .slice(0, 1)
@@ -306,353 +295,261 @@ export const deriveHomeState = ({
     playerFocusItems: limitedPlayerFocusItems,
     totalPlayerFocusCount,
     quickActions,
-    upNextItems: limitedUpNextItems,
+    upNextItems: upNextItems.slice(0, 2),
     recentActivityItems: recentActivityItems.slice(0, 2)
   };
 };
 
 export const HomeView: React.FC<HomeViewProps> = ({
   session,
-  match,
+  match: _match,
   matches = [],
   sessions = [],
   players = [],
   focuses = [],
-  resources = [],
-  team,
+  resources: _resources,
+  team: _team,
+  clubTeams = [],
+  activeScope = { mode: 'team', teamId: 'ct-1' },
   onStartLiveSession,
   onNavigateToTrain,
   onNavigateToMatch,
   onNavigateToTeam,
   onNavigateToLibrary
 }) => {
-  const {
-    teamName,
-    primaryContextType,
-    primarySession,
-    primaryMatch,
-    coachingNotes,
-    totalCoachingNotesCount,
-    playerFocusItems,
-    totalPlayerFocusCount,
-    quickActions,
-    upNextItems,
-    recentActivityItems
-  } = deriveHomeState({
-    session,
-    match,
-    matches,
-    sessions,
-    players,
-    focuses,
-    resources,
-    team
-  });
+  // Filter players according to current team context vs club context
+  const scopePlayers = getPlayersForScope(players, activeScope);
 
-  const handleActionClick = (action: 'train' | 'library' | 'match' | 'team') => {
-    if (action === 'train') onNavigateToTrain();
-    else if (action === 'library') (onNavigateToLibrary || onNavigateToTrain)();
-    else if (action === 'match') onNavigateToMatch();
-    else onNavigateToTeam();
-  };
+  // Group teams for Club Overview
+  const teamGroups = groupPlayersByTeam(clubTeams, players);
+
+  const activeLiveSession = sessions.find(s => s.status === 'live' || (s.currentLiveState && !s.currentLiveState.isPaused));
+
+  const isClubView = activeScope.mode === 'club';
 
   return (
-    <div className="home-container">
-      {/* 1. PRIMARY CONTEXT CARD */}
-      {primaryContextType === 'IN_PROGRESS' && primarySession && (
-        <div className="home-primary-card" style={{ borderLeft: '4px solid var(--status-live)' }}>
-          <div className="home-primary-badge-row">
-            <span className="badge badge-live" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
-              SESSION IN PROGRESS
-            </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{getSessionDuration(primarySession)} mins</span>
-          </div>
-          <h2 className="home-primary-title">{primarySession.title}</h2>
-          <div className="home-primary-meta">
-            <span>{teamName}</span>
-            <span>·</span>
-            <span>{primarySession.startTime}</span>
-            <span>·</span>
-            <span>{primarySession.confirmedAttendingPlayerIds.length} attending</span>
-          </div>
-          <div className="home-primary-actions">
-            <button className="btn btn-live" onClick={onStartLiveSession}>
-              <Play size={18} /> CONTINUE SESSION
-            </button>
-            <button className="btn btn-secondary" onClick={onNavigateToTrain}>
-              VIEW SESSION
-            </button>
-          </div>
-        </div>
-      )}
-
-      {primaryContextType === 'TRAINING_TODAY' && primarySession && (
-        <div className="home-primary-card">
-          <div className="home-primary-badge-row">
-            <span className="badge badge-gold">TONIGHT'S TRAINING</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>
-              {primarySession.startTime}
-            </span>
-          </div>
-          <h2 className="home-primary-title">{primarySession.title}</h2>
-          <div className="home-primary-meta">
-            <span>{teamName}</span>
-            <span>·</span>
-            <span>{primarySession.confirmedAttendingPlayerIds.length} players expected</span>
-            {primarySession.sessionObjectives.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{primarySession.sessionObjectives[0]}</span>
-              </>
-            )}
-          </div>
-          <div className="home-primary-actions">
-            <button
-              className="btn btn-primary"
-              onClick={onStartLiveSession}
-              disabled={!primarySession.rotationPlan?.length && !primarySession.blocks?.length}
-            >
-              <Play size={18} /> START TRAINING
-            </button>
-            <button className="btn btn-secondary" onClick={onNavigateToTrain}>
-              VIEW SESSION
-            </button>
-          </div>
-        </div>
-      )}
-
-      {primaryContextType === 'MATCH_DAY' && primaryMatch && (
-        <div className="home-primary-card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
-          <div className="home-primary-badge-row">
-            <span className="badge badge-gold">MATCH DAY</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{primaryMatch.format}</span>
-          </div>
-          <h2 className="home-primary-title">{teamName} vs {primaryMatch.opponent}</h2>
-          <div className="home-primary-meta">
-            <span>1:00 PM</span>
-            <span>·</span>
-            <span>{primaryMatch.venue}</span>
-          </div>
-          <div className="home-primary-actions">
-            <button className="btn btn-gold" onClick={onNavigateToMatch}>
-              <Trophy size={18} /> MATCH CENTRE
-            </button>
-          </div>
-        </div>
-      )}
-
-      {primaryContextType === 'TRAINING_UPCOMING' && primarySession && (
-        <div className="home-primary-card">
-          <div className="home-primary-badge-row">
-            <span className="badge badge-green">NEXT TRAINING</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              {formatShortDate(primarySession.date, primarySession.startTime)}
-            </span>
-          </div>
-          <h2 className="home-primary-title">{primarySession.title}</h2>
-          <div className="home-primary-meta">
-            <span>{teamName}</span>
-            {primarySession.sessionObjectives.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{primarySession.sessionObjectives.join(' + ')}</span>
-              </>
-            )}
-          </div>
-          <div className="home-primary-actions">
-            <button className="btn btn-primary" onClick={onNavigateToTrain}>
-              VIEW SESSION
-            </button>
-            <button className="btn btn-secondary" onClick={onNavigateToTrain}>
-              EDIT PLAN
-            </button>
-          </div>
-        </div>
-      )}
-
-      {primaryContextType === 'MATCH_REVIEW' && primaryMatch && (
-        <div className="home-primary-card">
-          <div className="home-primary-badge-row">
-            <span className="badge badge-warning">MATCH COMPLETE</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{primaryMatch.date}</span>
-          </div>
-          <h2 className="home-primary-title">{teamName} vs {primaryMatch.opponent}</h2>
-          <div className="home-primary-meta">
-            <span>{primaryMatch.venue}</span>
-            {primaryMatch.result && (
-              <>
-                <span>·</span>
-                <span>{primaryMatch.result}</span>
-              </>
-            )}
-          </div>
-          <div className="home-primary-actions">
-            <button className="btn btn-gold" onClick={onNavigateToMatch}>
-              <Trophy size={18} /> REVIEW MATCH
-            </button>
-          </div>
-        </div>
-      )}
-
-      {primaryContextType === 'NO_SESSION' && (
-        <div className="home-primary-card prompt-card">
-          <div className="home-primary-badge-row">
-            <span className="badge badge-gold">GET READY</span>
-          </div>
-          <h2 className="home-primary-title" style={{ fontSize: '1.1rem' }}>Plan your next training</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '4px' }}>
-            No training session is currently scheduled.
-          </p>
-          <div className="home-primary-actions" style={{ marginTop: '12px' }}>
-            <button className="btn btn-primary" onClick={onNavigateToTrain}>
-              <Dumbbell size={16} /> Plan Training
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 2. ADAPTIVE QUICK ACTIONS (CONCISE & DEDUPLICATED) */}
-      <div className="quick-actions-grid">
-        {quickActions.map(qa => (
-          <button key={qa.id} className="quick-action-btn" onClick={() => handleActionClick(qa.action)}>
-            <div className="quick-action-icon">
-              {qa.icon === 'train' && <Dumbbell size={18} />}
-              {qa.icon === 'drill' && <BookOpen size={18} />}
-              {qa.icon === 'match' && <Trophy size={18} />}
-              {qa.icon === 'team' && <Users size={18} />}
+    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* ========================================================= */}
+      {/* CLUB OVERVIEW CONTEXT HOME VIEW */}
+      {/* ========================================================= */}
+      {isClubView ? (
+        <>
+          {/* Club Header Hero */}
+          <div className="home-primary-card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
+            <div className="home-primary-badge-row">
+              <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Shield size={14} /> CLUB OVERVIEW
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>{clubTeams.length} Teams Registered</span>
             </div>
-            <span>{qa.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* 3. WORTH A LOOK (HIGH PRIORITY — MAX 3, ENTIRE ROW TAPPABLE) */}
-      {coachingNotes.length > 0 && (
-        <section className="home-section">
-          <div className="home-section-header">
-            <span>WORTH A LOOK</span>
-            {totalCoachingNotesCount > 3 ? (
-              <button
-                onClick={onNavigateToTeam}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
-              >
-                View all {totalCoachingNotesCount} <ChevronRight size={12} />
+            <h2 className="home-primary-title">Inside Edge Cricket Club</h2>
+            <div className="home-primary-meta">
+              <span>{players.length} Total Players</span>
+              <span>·</span>
+              <span>{sessions.length} Planned Sessions</span>
+              <span>·</span>
+              <span>{matches.length} Match Records</span>
+            </div>
+            <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+              <button className="btn btn-gold" onClick={onNavigateToTrain}>
+                <Dumbbell size={16} /> Plan Club Training
               </button>
-            ) : (
-              <Sparkles size={14} color="var(--accent-gold)" />
-            )}
-          </div>
-          <div className="home-insight-card">
-            {coachingNotes.map(note => (
-              <div
-                key={note.id}
-                className={`home-insight-row ${note.type === 'workload' ? 'gold-accent' : note.type === 'plan' ? 'warning-accent' : 'green-accent'}`}
-                onClick={note.target === 'team' ? onNavigateToTeam : note.target === 'match' ? onNavigateToMatch : onNavigateToTrain}
-                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <div className="home-insight-info">
-                  <div className="home-insight-title">{note.title}</div>
-                  <div className="home-insight-desc">{note.description}</div>
-                </div>
-                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 4. PLAYER FOCUS (NORMAL DEVELOPMENT — MAX 3, DEDUPLICATED, ENTIRE ROW TAPPABLE) */}
-      {playerFocusItems.length > 0 && (
-        <section className="home-section">
-          <div className="home-section-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>PLAYER FOCUS</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{totalPlayerFocusCount} active</span>
+              <button className="btn btn-secondary" onClick={onNavigateToTeam}>
+                Manage Teams ({clubTeams.length})
+              </button>
             </div>
-            <button
-              onClick={onNavigateToTeam}
-              style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
-            >
-              View all <ChevronRight size={12} />
+          </div>
+
+          {/* Teams Needing Attention (Summarised by Team) */}
+          <section className="home-section">
+            <div className="home-section-header">
+              <span>TEAMS NEEDING ATTENTION</span>
+              <Sparkles size={14} color="var(--accent-gold)" />
+            </div>
+            <div className="home-insight-card">
+              {teamGroups.map(({ team: t, players: tPlayers, attentionCount }) => (
+                <div
+                  key={t.id}
+                  className="home-insight-row gold-accent"
+                  onClick={onNavigateToTeam}
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <div className="home-insight-info">
+                    <div className="home-insight-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={14} color="var(--accent-gold)" /> {t.name}
+                    </div>
+                    <div className="home-insight-desc">
+                      {attentionCount > 0
+                        ? `${attentionCount} player${attentionCount === 1 ? '' : 's'} with workload restrictions or active focus`
+                        : `${tPlayers.length} players · Squad in good order`}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {attentionCount > 0 && <span className="badge badge-warning">{attentionCount} Issue{attentionCount === 1 ? '' : 's'}</span>}
+                    <ChevronRight size={16} color="var(--text-muted)" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Upcoming Club Fixtures */}
+          {matches.length > 0 && (
+            <section className="home-section">
+              <div className="home-section-header">
+                <span>UPCOMING CLUB MATCHES</span>
+                <Trophy size={14} color="var(--accent-gold)" />
+              </div>
+              <div className="up-next-card">
+                {matches.slice(0, 3).map(m => (
+                  <div key={m.id} className="up-next-row" onClick={onNavigateToMatch} style={{ cursor: 'pointer' }}>
+                    <div className="up-next-left">
+                      <div className="up-next-day">
+                        <span className="day-name">MATCH</span>
+                        <span className="day-num">1</span>
+                      </div>
+                      <div className="up-next-details">
+                        <div className="up-next-title">vs {m.opponent}</div>
+                        <div className="up-next-sub">{m.format} · {m.venue}</div>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} color="var(--text-muted)" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        /* ========================================================= */
+        /* TEAM CONTEXT HOME VIEW (Strictly Team Scoped) */
+        /* ========================================================= */
+        <>
+          {activeLiveSession && (
+            <div className="home-primary-card" style={{ borderLeft: '4px solid var(--status-live)' }}>
+              <div className="home-primary-badge-row">
+                <span className="badge badge-live" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                  SESSION IN PROGRESS
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{getSessionDuration(activeLiveSession)} mins</span>
+              </div>
+              <h2 className="home-primary-title">{activeLiveSession.title}</h2>
+              <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+                <button className="btn btn-live" onClick={onStartLiveSession}>
+                  <Play size={18} /> CONTINUE SESSION
+                </button>
+                <button className="btn btn-secondary" onClick={onNavigateToTrain}>
+                  VIEW SESSION
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!activeLiveSession && session && (
+            <div className="home-primary-card">
+              <div className="home-primary-badge-row">
+                <span className="badge badge-green">NEXT TRAINING</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  {formatShortDate(session.date, session.startTime)}
+                </span>
+              </div>
+              <h2 className="home-primary-title">{session.title}</h2>
+              <div className="home-primary-meta">
+                <span>{scopePlayers.length} Team Players</span>
+              </div>
+              <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+                <button className="btn btn-primary" onClick={onStartLiveSession}>
+                  <Play size={18} /> START TRAINING
+                </button>
+                <button className="btn btn-secondary" onClick={onNavigateToTrain}>
+                  VIEW PLAN
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!activeLiveSession && !session && (
+            <div className="home-primary-card prompt-card">
+              <div className="home-primary-badge-row">
+                <span className="badge badge-gold">GET READY</span>
+              </div>
+              <h2 className="home-primary-title" style={{ fontSize: '1.1rem' }}>Plan next training</h2>
+              <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+                <button className="btn btn-primary" onClick={onNavigateToTrain}>
+                  <Dumbbell size={16} /> Plan Training
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions Grid */}
+          <div className="quick-actions-grid">
+            <button className="quick-action-btn" onClick={onNavigateToTrain}>
+              <div className="quick-action-icon"><Dumbbell size={18} /></div>
+              <span>Plan Session</span>
+            </button>
+            <button className="quick-action-btn" onClick={() => (onNavigateToLibrary || onNavigateToTrain)()}>
+              <div className="quick-action-icon"><BookOpen size={18} /></div>
+              <span>Drill Library</span>
+            </button>
+            <button className="quick-action-btn" onClick={onNavigateToMatch}>
+              <div className="quick-action-icon"><Trophy size={18} /></div>
+              <span>Match Prep</span>
+            </button>
+            <button className="quick-action-btn" onClick={onNavigateToTeam}>
+              <div className="quick-action-icon"><Users size={18} /></div>
+              <span>Roster ({scopePlayers.length})</span>
             </button>
           </div>
-          <div className="home-insight-card">
-            {playerFocusItems.map(item => (
-              <div
-                key={item.id}
-                className="home-insight-row green-accent"
-                onClick={onNavigateToTeam}
-                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <div className="home-insight-info">
-                  <div className="home-insight-title">{item.name}</div>
-                  <div className="home-insight-desc">
-                    <strong style={{ color: 'var(--accent-gold)' }}>{item.domain}:</strong> {item.focusStatement}
-                  </div>
-                </div>
-                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
-      {/* 5. UP NEXT (MAX 2 CHRONOLOGICAL UPCOMING ITEMS) */}
-      {upNextItems.length > 0 && (
-        <section className="home-section">
-          <div className="home-section-header">
-            <span>UP NEXT</span>
-            <Clock size={14} color="var(--text-muted)" />
-          </div>
-          <div className="up-next-card">
-            {upNextItems.map(item => (
-              <div
-                key={item.id}
-                className="up-next-row"
-                onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="up-next-left">
-                  <div className="up-next-day">
-                    <span className="day-name">{item.dayName}</span>
-                    <span className="day-num">{item.dayNum}</span>
-                  </div>
-                  <div className="up-next-details">
-                    <div className="up-next-title">{item.title}</div>
-                    <div className="up-next-sub">{item.subtext}</div>
-                  </div>
-                </div>
-                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
+          {/* Player Workload & Attention for Team */}
+          {scopePlayers.some(p => p.workloadRestriction?.restrictedBowler) && (
+            <section className="home-section">
+              <div className="home-section-header">
+                <span>WORKLOAD RESTRICTIONS</span>
+                <ShieldAlert size={14} color="#f97316" />
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+              <div className="home-insight-card">
+                {scopePlayers.filter(p => p.workloadRestriction?.restrictedBowler).map(p => (
+                  <div key={p.id} className="home-insight-row gold-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
+                    <div className="home-insight-info">
+                      <div className="home-insight-title">{p.name}</div>
+                      <div className="home-insight-desc">{p.workloadRestriction?.notes || 'Bowling workload restriction active'}</div>
+                    </div>
+                    <ChevronRight size={16} color="var(--text-muted)" />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-      {/* 6. RECENT ACTIVITY (MAX 1-2 ITEMS, ENTIRE ROW TAPPABLE) */}
-      {recentActivityItems.length > 0 && (
-        <section className="home-section">
-          <div className="home-section-header">
-            <span>RECENT ACTIVITY</span>
-          </div>
-          <div className="home-insight-card">
-            {recentActivityItems.map(item => (
-              <div
-                key={item.id}
-                className="home-insight-row"
-                onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
-                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <div className="home-insight-info">
-                  <div className="home-insight-title">{item.title}</div>
-                  <div className="home-insight-desc">{item.meta}</div>
-                </div>
-                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
+          {/* Player Focus Items for Team */}
+          {scopePlayers.some(p => focuses.some(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))) && (
+            <section className="home-section">
+              <div className="home-section-header">
+                <span>PLAYER FOCUS</span>
+                <Sparkles size={14} color="var(--accent-gold)" />
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="home-insight-card">
+                {scopePlayers.filter(p => focuses.some(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))).slice(0, 3).map(p => {
+                  const pf = focuses.find(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))!;
+                  return (
+                    <div key={p.id} className="home-insight-row green-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
+                      <div className="home-insight-info">
+                        <div className="home-insight-title">{p.name}</div>
+                        <div className="home-insight-desc">
+                          <strong style={{ color: 'var(--accent-gold)' }}>{pf.domain}:</strong> {pf.focusStatement}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} color="var(--text-muted)" />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

@@ -37,6 +37,13 @@ export type FocusState = 'Current Focus' | 'Developing' | 'Consistent' | 'Streng
 
 import type { BowlerCapability, BatterObservation, TacticalPhase, FieldSpot } from '../modules/cricket/tactics/types';
 
+export type ActiveScopeMode = 'team' | 'club';
+
+export interface ActiveScope {
+  mode: ActiveScopeMode;
+  teamId?: string; // Present when mode === 'team'
+}
+
 export interface WorkloadRestriction {
   maxDeliveries?: number;
   restrictedBowler: boolean;
@@ -49,6 +56,8 @@ export interface Player {
   photoUrl?: string;
   preferredName?: string;
   ageGroup?: string;
+  primaryTeamId?: string; // Team ID the player primarily belongs to (e.g., 't1')
+  eligibleTeamIds?: string[]; // Optional secondary/eligible team IDs
   primaryRole: PrimaryRole;
   secondaryRole: SecondaryRole;
   battingHand: BattingHand;

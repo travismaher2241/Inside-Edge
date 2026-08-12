@@ -5,7 +5,8 @@ import type {
   TrainingResource,
   Player,
   SavedClubTemplate,
-  RollingFairnessLedger
+  RollingFairnessLedger,
+  ActiveScope
 } from '../../../types/cricket';
 import { ClubSessionWizard } from './ClubSessionWizard';
 import { FairnessReviewPanel } from './FairnessReviewPanel';
@@ -14,6 +15,7 @@ import { Play, Dumbbell } from 'lucide-react';
 
 interface ClubTrainingPlannerProps {
   teams: ClubTeam[];
+  activeScope?: ActiveScope;
   resources: TrainingResource[];
   players: Player[];
   savedTemplates: SavedClubTemplate[];
@@ -27,6 +29,7 @@ interface ClubTrainingPlannerProps {
 
 export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
   teams,
+  activeScope = { mode: 'team', teamId: 'ct-1' },
   resources,
   players,
   savedTemplates,
@@ -178,6 +181,8 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
       {activeTab === 'fairness' && (
         <FairnessReviewPanel
           players={players}
+          teams={teams}
+          activeScope={activeScope}
           rollingLedger={rollingLedger}
         />
       )}

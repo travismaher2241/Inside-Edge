@@ -59,6 +59,7 @@ export const SEED_PLAYERS: Player[] = [
     bowlingStyle: 'does_not_bowl',
     wicketkeepingCapability: 'none',
     trainingAvailability: true,
+    primaryTeamId: 'ct-1',
     activeDevelopmentFocusIds: ['focus-1']
   },
   {

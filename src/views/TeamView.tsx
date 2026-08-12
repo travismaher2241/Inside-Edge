@@ -1,13 +1,16 @@
-// Team Roster & Player Profile View for Inside Edge
+// Team Roster & Player Profile View for Inside Edge (Supports Team vs Club Context)
 import React, { useState } from 'react';
-import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, ClubTrainingSession } from '../types/cricket';
+import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
 import { getRoleBadgeLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
-import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare } from 'lucide-react';
+import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
+import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
 import { StorageEngine } from '../storage/db';
 
 interface TeamViewProps {
   players: Player[];
+  clubTeams?: ClubTeam[];
+  activeScope?: ActiveScope;
   focuses: DevelopmentFocus[];
   observations: Observation[];
   session?: ClubTrainingSession;
@@ -31,16 +34,21 @@ const ROLES: Array<{ value: PrimaryRole | 'all'; label: string }> = [
 
 export const TeamView: React.FC<TeamViewProps> = ({
   players,
+  clubTeams = [],
+  activeScope = { mode: 'team', teamId: 'ct-1' },
   focuses,
   observations,
-  session,
-  onUpdateSession,
+  session: _session,
+  onUpdateSession: _onUpdateSession,
   onOpenQuickObservation,
   onAddDevelopmentFocus,
   onUpdateDevelopmentFocusState,
   onAddPlayer,
   onUpdatePlayer
 }) => {
+  // Drilled Team inside Club View (if user tapped a team in Club View)
+  const [drilledTeamId, setDrilledTeamId] = useState<string | null>(null);
+
   // Level 1 vs Level 2 View State
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [profileTab, setProfileTab] = useState<'overview' | 'development' | 'observations' | 'skills'>('overview');
@@ -53,6 +61,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   // Modals
   const [isAddFocusOpen, setIsAddFocusOpen] = useState<boolean>(false);
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState<boolean>(false);
+  const [isTeamTransferOpen, setIsTeamTransferOpen] = useState<boolean>(false);
 
   // Focus Form State
   const [focusDomain, setFocusDomain] = useState<DevelopmentDomain>('Batting');
@@ -65,11 +74,23 @@ export const TeamView: React.FC<TeamViewProps> = ({
   const [newBowlingStyle, setNewBowlingStyle] = useState<BowlingStyle>('does_not_bowl');
   const [newBattingHand, setNewBattingHand] = useState<'right' | 'left'>('right');
 
-  // Filtered Roster
-  const visiblePlayers = players.filter(player =>
+  // Effective working scope: if user drilled into a specific team in Club view, use that teamId
+  const effectiveScope: ActiveScope = drilledTeamId
+    ? { mode: 'team', teamId: drilledTeamId }
+    : activeScope;
+
+  const isClubView = activeScope.mode === 'club' && !drilledTeamId && !searchQuery.trim();
+
+  // Players filtered by current team or global scope
+  const scopePlayers = getPlayersForScope(players, effectiveScope);
+
+  const visiblePlayers = scopePlayers.filter(player =>
     (roleFilter === 'all' || player.primaryRole === roleFilter) &&
     (!searchQuery.trim() || `${player.name} ${player.preferredName || ''}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   );
+
+  // Club View Team Groupings
+  const clubTeamGroups = groupPlayersByTeam(clubTeams, players);
 
   // Selected Player Related Data
   const playerFocuses = selectedPlayer
@@ -107,10 +128,12 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
   const handleCreatePlayer = () => {
     if (!newPlayerName.trim()) return;
+    const targetTeamId = effectiveScope.teamId || clubTeams[0]?.id || 'ct-1';
     const newPlayer: Player = {
       id: `p-${Date.now()}`,
       name: newPlayerName.trim(),
       preferredName: newPlayerName.trim().split(' ')[0],
+      primaryTeamId: targetTeamId,
       primaryRole: newPrimaryRole,
       secondaryRole: 'none',
       battingHand: newBattingHand,
@@ -125,36 +148,135 @@ export const TeamView: React.FC<TeamViewProps> = ({
     setIsAddPlayerOpen(false);
   };
 
+  const handleTransferTeam = (newTeamId: string) => {
+    if (!selectedPlayer || !onUpdatePlayer) return;
+    const updated = { ...selectedPlayer, primaryTeamId: newTeamId };
+    onUpdatePlayer(updated);
+    setSelectedPlayer(updated);
+    setIsTeamTransferOpen(false);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* ========================================================= */}
-      {/* LEVEL 1: SQUAD ROSTER (Default View) */}
+      {/* CLUB CONTEXT VIEW (TEAMS FIRST) */}
       {/* ========================================================= */}
-      {!selectedPlayer && (
+      {isClubView && !selectedPlayer && (
         <>
-          {/* Compact Header */}
+          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h1 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Squad</h1>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                {players.length} players
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Shield size={14} /> CLUB SQUADS
               </div>
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '2px' }}>
+                {clubTeams.length} Teams · {players.length} Players
+              </h1>
             </div>
-            <button 
-              className="btn btn-gold" 
+            <button
+              className="btn btn-gold"
               onClick={() => setIsAddPlayerOpen(true)}
               style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
             >
-              <Plus size={16} /> Add
+              <Plus size={16} /> Add Player
             </button>
           </div>
 
-          {/* Compact Search & Filter Controls */}
+          {/* Club-Wide Player Search */}
+          <div style={{ position: 'relative' }}>
+            <input
+              type="search"
+              placeholder="Search all players across club..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                paddingLeft: '32px',
+                minHeight: '40px',
+                fontSize: '0.85rem'
+              }}
+            />
+            <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '16px', pointerEvents: 'none' }} />
+          </div>
+
+          {/* Teams Summary Cards List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {clubTeamGroups.map(({ team, players: tPlayers, attentionCount }) => (
+              <div
+                key={team.id}
+                className="card"
+                onClick={() => setDrilledTeamId(team.id)}
+                style={{ cursor: 'pointer', padding: '14px', background: 'var(--bg-surface-card)', marginBottom: 0 }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={16} color="var(--accent-gold)" />
+                      {team.name}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {tPlayers.length} player{tPlayers.length === 1 ? '' : 's'} · {team.gradeOrDivision || team.ageGroup}
+                    </div>
+                    {attentionCount > 0 ? (
+                      <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '4px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ShieldAlert size={12} />
+                        <span>{attentionCount} player{attentionCount === 1 ? '' : 's'} needing attention</span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.75rem', color: '#4ade80', marginTop: '4px' }}>
+                        ✓ No current squad issues
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="badge badge-green" style={{ fontSize: '0.75rem' }}>{tPlayers.length} Players</span>
+                    <ChevronRight size={18} color="var(--text-muted)" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ========================================================= */}
+      {/* TEAM CONTEXT VIEW OR DRILLED TEAM ROSTER */}
+      {/* ========================================================= */}
+      {(!isClubView || searchQuery.trim()) && !selectedPlayer && (
+        <>
+          {/* Header & Back Button if Drilled */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              {drilledTeamId && (
+                <button
+                  onClick={() => setDrilledTeamId(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}
+                >
+                  <ArrowLeft size={14} /> Back to All Teams
+                </button>
+              )}
+              <h1 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                {drilledTeamId ? (clubTeams.find(t => t.id === drilledTeamId)?.name || 'Team Roster') : 'Squad Roster'}
+              </h1>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                {visiblePlayers.length} players shown
+              </div>
+            </div>
+            <button
+              className="btn btn-gold"
+              onClick={() => setIsAddPlayerOpen(true)}
+              style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
+            >
+              <Plus size={16} /> Add Player
+            </button>
+          </div>
+
+          {/* Search & Filter Controls */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <input
                 type="search"
-                placeholder="Search players..."
+                placeholder={activeScope.mode === 'club' ? "Search all club players..." : "Search team players..."}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
@@ -167,7 +289,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
             </div>
 
             {roleFilter === 'all' ? (
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => setIsRoleSheetOpen(true)}
                 style={{ width: 'auto', padding: '0 12px', height: '40px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
@@ -175,7 +297,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 <Filter size={14} /> All roles
               </button>
             ) : (
-              <button 
+              <button
                 className="btn btn-gold"
                 onClick={() => setRoleFilter('all')}
                 style={{ width: 'auto', padding: '0 10px', height: '40px', fontSize: '0.78rem', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
@@ -186,15 +308,16 @@ export const TeamView: React.FC<TeamViewProps> = ({
             )}
           </div>
 
-          {/* Compact Roster List */}
+          {/* Roster List */}
           <div className="roster-list-container">
             {visiblePlayers.map(p => {
               const activeFocus = focuses.find(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
               const isRestricted = Boolean(p.workloadRestriction?.restrictedBowler);
+              const playerTeam = clubTeams.find(t => t.id === p.primaryTeamId);
 
               return (
-                <div 
-                  key={p.id} 
+                <div
+                  key={p.id}
                   className="roster-row-card"
                   onClick={() => {
                     setSelectedPlayer(p);
@@ -202,7 +325,12 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   }}
                 >
                   <div className="roster-row-left">
-                    <div className="roster-row-name">{p.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div className="roster-row-name">{p.name}</div>
+                      {activeScope.mode === 'club' && playerTeam && (
+                        <span className="badge badge-green" style={{ fontSize: '0.62rem' }}>{playerTeam.name}</span>
+                      )}
+                    </div>
                     <div className="roster-row-role">
                       {getRoleBadgeLabel(p.primaryRole)} · {p.battingHand.toUpperCase()[0]}HB
                     </div>
@@ -224,7 +352,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   </div>
 
                   <div className="roster-row-right">
-                    <button 
+                    <button
                       className="btn-mini-action"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -257,12 +385,12 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* Top Profile Navigation Bar */}
           <div className="player-profile-nav-bar">
             <button className="btn-back-squad" onClick={() => setSelectedPlayer(null)}>
-              <ArrowLeft size={14} /> Squad
+              <ArrowLeft size={14} /> Back to Roster
             </button>
 
             {/* Prev / Next Player Switcher */}
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <button 
+              <button
                 className="btn btn-secondary"
                 disabled={!prevPlayer}
                 onClick={() => prevPlayer && setSelectedPlayer(prevPlayer)}
@@ -274,7 +402,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                 {currentIdx + 1} / {visiblePlayers.length}
               </span>
-              <button 
+              <button
                 className="btn btn-secondary"
                 disabled={!nextPlayer}
                 onClick={() => nextPlayer && setSelectedPlayer(nextPlayer)}
@@ -290,13 +418,23 @@ export const TeamView: React.FC<TeamViewProps> = ({
           <div className="player-profile-header-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff' }}>{selectedPlayer.name}</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff' }}>{selectedPlayer.name}</h2>
+                  <button
+                    onClick={() => setIsTeamTransferOpen(true)}
+                    className="badge badge-gold"
+                    style={{ cursor: 'pointer', border: 'none' }}
+                    title="Change Primary Team"
+                  >
+                    {clubTeams.find(t => t.id === selectedPlayer.primaryTeamId)?.name || 'Senior Men'} ▾
+                  </button>
+                </div>
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                   {getRoleBadgeLabel(selectedPlayer.primaryRole)} · {selectedPlayer.battingHand.toUpperCase()[0]}HB
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => onOpenQuickObservation(selectedPlayer)}
                   style={{ width: 'auto', height: '36px', fontSize: '0.75rem' }}
@@ -311,40 +449,6 @@ export const TeamView: React.FC<TeamViewProps> = ({
               <div style={{ background: 'var(--status-warning-bg)', border: '1px solid rgba(231, 111, 81, 0.3)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', color: '#f97316', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <ShieldAlert size={16} />
                 <span>{selectedPlayer.workloadRestriction.notes || 'Bowling workload restriction active'}</span>
-              </div>
-            )}
-
-            {/* Session Attendance Toggle (if session available) */}
-            {session && onUpdateSession && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface-elevated)', padding: '8px 12px', borderRadius: '8px' }}>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Training Availability</span>
-                <button
-                  onClick={() => {
-                    const currentExpected = session.expectedPlayerIds || [];
-                    const isAvailable = currentExpected.includes(selectedPlayer.id);
-                    const updatedExpected = isAvailable
-                      ? currentExpected.filter((id: string) => id !== selectedPlayer.id)
-                      : [...currentExpected, selectedPlayer.id];
-                    onUpdateSession({
-                      ...session,
-                      expectedPlayerIds: updatedExpected,
-                      confirmedAttendingPlayerIds: updatedExpected,
-                      availabilityRecords: {
-                        ...session.availabilityRecords,
-                        [selectedPlayer.id]: {
-                          ...session.availabilityRecords[selectedPlayer.id],
-                          playerId: selectedPlayer.id,
-                          status: isAvailable ? 'not_attending' : 'attending'
-                        }
-                      }
-                    });
-                  }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  <span className={`badge ${(session.expectedPlayerIds || []).includes(selectedPlayer.id) ? 'badge-green' : 'badge-warning'}`}>
-                    {(session.expectedPlayerIds || []).includes(selectedPlayer.id) ? '✓ Attending' : '✗ Absent'}
-                  </span>
-                </button>
               </div>
             )}
           </div>
@@ -382,6 +486,22 @@ export const TeamView: React.FC<TeamViewProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  PRIMARY TEAM & MEMBERSHIP
+                </div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                  {clubTeams.find(t => t.id === selectedPlayer.primaryTeamId)?.name || 'Senior Men'}
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setIsTeamTransferOpen(true)}
+                  style={{ width: 'auto', height: '28px', fontSize: '0.72rem', marginTop: '6px' }}
+                >
+                  Transfer to another team
+                </button>
+              </div>
+
+              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
                   CURRENT FOCUS
                 </div>
                 {playerFocuses.length > 0 ? (
@@ -404,22 +524,6 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   </div>
                 ) : (
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>No active physical or bowling restrictions.</div>
-                )}
-              </div>
-
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  RECENT NOTES ({playerObservations.length})
-                </div>
-                {playerObservations.length > 0 ? (
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                    "{playerObservations[0].textNote}"
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      Recorded on {new Date(playerObservations[0].timestamp).toLocaleDateString()}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No observations recorded yet.</div>
                 )}
               </div>
             </div>
@@ -544,9 +648,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* INSIDE EDGE THEMED ROLE FILTER BOTTOM SHEET */}
-      {/* ========================================================= */}
+      {/* Role Filter Sheet */}
       {isRoleSheetOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsRoleSheetOpen(false)}>
           <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
@@ -576,9 +678,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* ADD DEVELOPMENT FOCUS BOTTOM SHEET */}
-      {/* ========================================================= */}
+      {/* Add Focus Sheet */}
       {isAddFocusOpen && selectedPlayer && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddFocusOpen(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="focus-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
@@ -633,9 +733,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* ADD SQUAD PLAYER BOTTOM SHEET */}
-      {/* ========================================================= */}
+      {/* Add Player Sheet */}
       {isAddPlayerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddPlayerOpen(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="add-player-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
@@ -725,6 +823,40 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
             <button className="btn btn-gold" onClick={handleCreatePlayer}>
               <Check size={16} /> Add Player
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Team Transfer Modal */}
+      {isTeamTransferOpen && selectedPlayer && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsTeamTransferOpen(false)}>
+          <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)', marginBottom: '12px' }}>
+              CHANGE PRIMARY TEAM — {selectedPlayer.name}
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+              All development focuses, observations, workload, and skills follow {selectedPlayer.name} intact across teams.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              {clubTeams.map(t => {
+                const isCurrent = selectedPlayer.primaryTeamId === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    className={`role-filter-sheet-item ${isCurrent ? 'selected' : ''}`}
+                    onClick={() => handleTransferTeam(t.id)}
+                  >
+                    <span>{t.name} ({t.gradeOrDivision || t.ageGroup})</span>
+                    {isCurrent && <Check size={16} color="var(--accent-gold)" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button className="btn btn-secondary" onClick={() => setIsTeamTransferOpen(false)}>
+              Cancel
             </button>
           </div>
         </div>
