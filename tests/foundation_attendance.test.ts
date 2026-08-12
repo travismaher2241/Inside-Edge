@@ -80,6 +80,9 @@ describe('Foundation & Attendance Upgrade Specification Tests', () => {
       liveAttendance: {}
     });
 
+    const shareLink = await RsvpInvitationService.getShareableLink('sess-test-4', 'play-3');
+    const validToken = shareLink.split('/rsvp/')[1];
+
     const payload = {
       playerId: 'play-3',
       status: 'confirmed' as const,
@@ -87,11 +90,11 @@ describe('Foundation & Attendance Upgrade Specification Tests', () => {
       submissionId: 'sub-test-123'
     };
 
-    const res1 = await PublicRsvpService.submitPlayerRsvp('token-abc', payload);
+    const res1 = await PublicRsvpService.submitPlayerRsvp(validToken, payload);
     expect(res1.success).toBe(true);
 
     // Idempotent retry with same submissionId succeeds
-    const res2 = await PublicRsvpService.submitPlayerRsvp('token-abc', payload);
+    const res2 = await PublicRsvpService.submitPlayerRsvp(validToken, payload);
     expect(res2.success).toBe(true);
     expect(res2.message).toContain('already processed');
 
@@ -102,9 +105,19 @@ describe('Foundation & Attendance Upgrade Specification Tests', () => {
       baseRevision: 0, // Server is now at revision 1
       submissionId: 'sub-test-456'
     };
-    const res3 = await PublicRsvpService.submitPlayerRsvp('token-abc', stalePayload);
+    const res3 = await PublicRsvpService.submitPlayerRsvp(validToken, stalePayload);
     expect(res3.success).toBe(false);
     expect(res3.status).toBe('conflict');
+
+    // An unregistered/garbage token must be rejected outright
+    const res4 = await PublicRsvpService.submitPlayerRsvp('not-a-real-token', { ...payload, submissionId: 'sub-test-789' });
+    expect(res4.success).toBe(false);
+
+    // A token that resolves to a different player must be rejected
+    const otherPlayerLink = await RsvpInvitationService.getShareableLink('sess-test-4', 'play-9');
+    const otherPlayerToken = otherPlayerLink.split('/rsvp/')[1];
+    const res5 = await PublicRsvpService.submitPlayerRsvp(otherPlayerToken, { ...payload, submissionId: 'sub-test-012' });
+    expect(res5.success).toBe(false);
   });
 
   it('5. IndexedDB Storage & Operation Log Journal', async () => {

@@ -4,6 +4,7 @@
 import type { PlayerRsvp, PlayerRsvpSubmissionPayload, ClubTrainingSession, Player } from '../../types/cricket';
 import { StorageEngine } from '../../storage/db';
 import { IndexedDbJournal } from '../../storage/indexedDbJournal';
+import { RsvpInvitationService } from './rsvpInvitationService';
 
 export interface PublicRsvpDetails {
   sessionId: string;
@@ -34,33 +35,30 @@ export const PublicRsvpService = {
   getPublicRsvpDetails: async (publicToken: string): Promise<PublicRsvpDetails | null> => {
     if (!publicToken) return null;
 
-    // Search local/cloud storage sessions
-    const sessions = StorageEngine.getClubSessions();
-    const players = StorageEngine.getPlayers();
+    const verification = await RsvpInvitationService.verifyToken(publicToken);
+    if (verification.status !== 'valid') return null;
+
+    const { sessionId, playerId } = verification.invitation;
+    const session = StorageEngine.getClubSessions().find(s => s.id === sessionId);
+    const player = StorageEngine.getPlayers().find(p => p.id === playerId);
+    if (!session || !player) return null;
+
     const clubTeams = StorageEngine.getClubTeams();
+    const team = clubTeams.find(t => session.includedTeamIds.includes(t.id)) || clubTeams[0];
+    const existingRsvp = session.rsvps?.[player.id];
 
-    for (const session of sessions) {
-      // Look up invitation or match player tokens
-      const matchingPlayer = players.find(p => p.id);
-      if (!matchingPlayer) continue;
-
-      const team = clubTeams.find(t => session.includedTeamIds.includes(t.id)) || clubTeams[0];
-      const existingRsvp = session.rsvps?.[matchingPlayer.id];
-
-      return {
-        sessionId: session.id,
-        sessionTitle: session.title || 'Training Session',
-        sessionDate: session.date,
-        sessionTime: `${session.startTime} - ${session.finishTime}`,
-        venueName: 'Training Ground',
-        teamName: team?.name || 'Squad',
-        player: matchingPlayer,
-        currentRsvp: existingRsvp,
-        rsvpDeadline: session.rsvpDeadline,
-        isClosed: session.rsvpClosedAt ? new Date() > new Date(session.rsvpClosedAt) : false
-      };
-    }
-    return null;
+    return {
+      sessionId: session.id,
+      sessionTitle: session.title || 'Training Session',
+      sessionDate: session.date,
+      sessionTime: `${session.startTime} - ${session.finishTime}`,
+      venueName: 'Training Ground',
+      teamName: team?.name || 'Squad',
+      player,
+      currentRsvp: existingRsvp,
+      rsvpDeadline: session.rsvpDeadline,
+      isClosed: session.rsvpClosedAt ? new Date() > new Date(session.rsvpClosedAt) : false
+    };
   },
 
   /**
@@ -79,6 +77,20 @@ export const PublicRsvpService = {
         status: 'confirmed',
         message: 'Submission already processed.'
       };
+    }
+
+    const verification = await RsvpInvitationService.verifyToken(publicToken);
+    if (verification.status === 'revoked') {
+      return { success: false, status: 'revoked', message: 'This RSVP link has been revoked. Please ask your coach for an updated link.' };
+    }
+    if (verification.status === 'expired') {
+      return { success: false, status: 'expired', message: 'This RSVP link has expired. Please ask your coach for an updated link.' };
+    }
+    if (verification.status === 'not_found') {
+      return { success: false, status: 'expired', message: 'This RSVP link is invalid.' };
+    }
+    if (verification.invitation.playerId !== playerId) {
+      return { success: false, status: 'expired', message: 'This RSVP link does not match the submitted player.' };
     }
 
     const isOnline = typeof navigator !== 'undefined' ? (navigator.onLine ?? true) : true;
@@ -101,8 +113,7 @@ export const PublicRsvpService = {
     }
 
     // Server-side / local engine write with transactional baseRevision validation
-    const sessions = StorageEngine.getClubSessions();
-    const session = sessions[0]; // Active target session
+    const session = StorageEngine.getClubSessions().find(s => s.id === verification.invitation.sessionId);
 
     if (!session) {
       return { success: false, status: 'expired', message: 'Session not found or expired.' };
