@@ -31,8 +31,8 @@ export interface CoachingNoteItem {
 export interface PlayerFocusItem {
   id: string;
   name: string;
-  reason: string;
-  detail: string;
+  domain: string;
+  focusStatement: string;
   playerId: string;
 }
 
@@ -52,6 +52,13 @@ export interface RecentActivityItem {
   type: 'session' | 'match';
 }
 
+export interface QuickActionItem {
+  id: string;
+  label: string;
+  icon: 'train' | 'drill' | 'match' | 'team';
+  action: 'train' | 'library' | 'match' | 'team';
+}
+
 const getTodayIsoDate = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -64,7 +71,7 @@ export const formatShortDate = (dateStr: string, timeStr?: string) => {
   if (!dateStr) return '';
   const dateObj = new Date(`${dateStr}T${timeStr || '00:00'}:00`);
   if (Number.isNaN(dateObj.getTime())) return `${dateStr}${timeStr ? ` · ${timeStr}` : ''}`;
-  
+
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
     month: 'short',
@@ -114,8 +121,8 @@ export const deriveHomeState = ({
   const upcomingSession = allSessions
     .filter(s => s.status !== 'completed' && s.date >= todayStr && s.id !== todaySession?.id && s.id !== activeLiveSession?.id)
     .sort((a, b) => a.date.localeCompare(b.date))[0];
-  
-  const recentMatchNeedingReview = allMatches.find(m => 
+
+  const recentMatchNeedingReview = allMatches.find(m =>
     (m.date < todayStr || Boolean(m.result)) && (!m.postMatchReview || !m.postMatchReview.reviewedDate)
   );
 
@@ -145,37 +152,26 @@ export const deriveHomeState = ({
     primaryContextType = 'NO_SESSION';
   }
 
-  // 2. Derive Coaching Notes ("Worth a Look")
+  // 2. Derive Coaching Notes ("Worth a Look") — HIGH PRIORITY & DEDUPLICATED
   const coachingNotes: CoachingNoteItem[] = [];
+  const playersWithAttention = new Set<string>();
 
-  // Workload notes
+  // Workload restriction & high priority player notes
   players.forEach(p => {
     if (p.workloadRestriction?.restrictedBowler) {
+      playersWithAttention.add(p.id);
+      const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
+      const focusText = playerFocuses.length > 0 ? ` · ${playerFocuses[0].domain}: ${playerFocuses[0].focusStatement}` : '';
+      const limitText = p.workloadRestriction.maxDeliveries ? ` (${p.workloadRestriction.maxDeliveries} balls max)` : '';
+
       coachingNotes.push({
         id: `note-workload-${p.id}`,
         title: `${p.name}`,
-        description: `Bowling workload restriction active ${p.workloadRestriction.maxDeliveries ? `(${p.workloadRestriction.maxDeliveries} balls max)` : ''}`,
+        description: `Bowling workload limit${limitText}${focusText}`,
         type: 'workload',
         target: 'team',
         targetPlayerId: p.id
       });
-    }
-  });
-
-  // Focus notes
-  focuses.forEach(f => {
-    if (f.state === 'Current Focus' || f.state === 'Developing') {
-      const player = players.find(p => p.id === f.playerId);
-      if (player) {
-        coachingNotes.push({
-          id: `note-focus-${f.id}`,
-          title: `${player.name}`,
-          description: `${f.domain} focus: ${f.focusStatement}`,
-          type: 'focus',
-          target: 'team',
-          targetPlayerId: player.id
-        });
-      }
     }
   });
 
@@ -193,32 +189,50 @@ export const deriveHomeState = ({
     }
   }
 
-  // Limit coaching notes to top 3 relevant items
+  const totalCoachingNotesCount = coachingNotes.length;
   const limitedCoachingNotes = coachingNotes.slice(0, 3);
 
-  // 3. Derive Player Focus items
+  // 3. Derive Player Focus items — NORMAL PRIORITY & EXCLUDES PLAYERS ALREADY IN WORTH A LOOK
   const playerFocusItems: PlayerFocusItem[] = [];
   players.forEach(p => {
+    // DO NOT duplicate players who already appear in Worth a Look!
+    if (playersWithAttention.has(p.id)) return;
+
     const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
-    const isRestricted = Boolean(p.workloadRestriction?.restrictedBowler);
 
-    if (isRestricted || playerFocuses.length > 0) {
-      const reasons: string[] = [];
-      if (isRestricted) reasons.push('Bowling workload restriction');
-      if (playerFocuses.length > 0) reasons.push(`${playerFocuses[0].domain} focus`);
-
+    if (playerFocuses.length > 0) {
       playerFocusItems.push({
         id: `pf-${p.id}`,
         name: p.name,
-        reason: reasons.join(' · '),
-        detail: playerFocuses[0]?.focusStatement || p.workloadRestriction?.notes || `${p.primaryRole.replace(/_/g, ' ')}`,
+        domain: playerFocuses[0].domain,
+        focusStatement: playerFocuses[0].focusStatement,
         playerId: p.id
       });
     }
   });
+
+  const totalPlayerFocusCount = playerFocusItems.length;
   const limitedPlayerFocusItems = playerFocusItems.slice(0, 3);
 
-  // 4. Derive Up Next items (max 2)
+  // 4. Adapt Quick Actions to Context (Prevent duplicate Plan Training CTA)
+  let quickActions: QuickActionItem[] = [];
+  if (primaryContextType === 'NO_SESSION') {
+    quickActions = [
+      { id: 'qa-drill', label: 'Create Drill', icon: 'drill', action: 'library' },
+      { id: 'qa-match', label: 'Match Prep', icon: 'match', action: 'match' },
+      { id: 'qa-team', label: 'Team', icon: 'team', action: 'team' },
+      { id: 'qa-library', label: 'Drill Library', icon: 'drill', action: 'library' }
+    ];
+  } else {
+    quickActions = [
+      { id: 'qa-plan', label: 'Plan Training', icon: 'train', action: 'train' },
+      { id: 'qa-drill', label: 'Create Drill', icon: 'drill', action: 'library' },
+      { id: 'qa-match', label: 'Match Prep', icon: 'match', action: 'match' },
+      { id: 'qa-team', label: 'Team', icon: 'team', action: 'team' }
+    ];
+  }
+
+  // 5. Derive Up Next items (max 2)
   const upNextItems: UpNextItem[] = [];
 
   allSessions
@@ -255,7 +269,7 @@ export const deriveHomeState = ({
 
   const limitedUpNextItems = upNextItems.slice(0, 2);
 
-  // 5. Derive Recent Activity (max 1 or 2)
+  // 6. Derive Recent Activity (max 1-2)
   const recentActivityItems: RecentActivityItem[] = [];
 
   allSessions
@@ -288,7 +302,10 @@ export const deriveHomeState = ({
     primarySession,
     primaryMatch,
     coachingNotes: limitedCoachingNotes,
+    totalCoachingNotesCount,
     playerFocusItems: limitedPlayerFocusItems,
+    totalPlayerFocusCount,
+    quickActions,
     upNextItems: limitedUpNextItems,
     recentActivityItems: recentActivityItems.slice(0, 2)
   };
@@ -315,7 +332,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
     primarySession,
     primaryMatch,
     coachingNotes,
+    totalCoachingNotesCount,
     playerFocusItems,
+    totalPlayerFocusCount,
+    quickActions,
     upNextItems,
     recentActivityItems
   } = deriveHomeState({
@@ -328,6 +348,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
     resources,
     team
   });
+
+  const handleActionClick = (action: 'train' | 'library' | 'match' | 'team') => {
+    if (action === 'train') onNavigateToTrain();
+    else if (action === 'library') (onNavigateToLibrary || onNavigateToTrain)();
+    else if (action === 'match') onNavigateToMatch();
+    else onNavigateToTeam();
+  };
 
   return (
     <div className="home-container">
@@ -381,8 +408,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
             )}
           </div>
           <div className="home-primary-actions">
-            <button 
-              className="btn btn-primary" 
+            <button
+              className="btn btn-primary"
               onClick={onStartLiveSession}
               disabled={!primarySession.rotationPlan?.length && !primarySession.blocks?.length}
             >
@@ -485,73 +512,66 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       )}
 
-      {/* 2. QUICK ACTIONS */}
+      {/* 2. ADAPTIVE QUICK ACTIONS (CONCISE & DEDUPLICATED) */}
       <div className="quick-actions-grid">
-        <button className="quick-action-btn" onClick={onNavigateToTrain}>
-          <div className="quick-action-icon">
-            <Dumbbell size={18} />
-          </div>
-          <span>Plan Training</span>
-        </button>
-
-        <button className="quick-action-btn" onClick={onNavigateToLibrary || onNavigateToTrain}>
-          <div className="quick-action-icon">
-            <BookOpen size={18} />
-          </div>
-          <span>Create Drill</span>
-        </button>
-
-        <button className="quick-action-btn" onClick={onNavigateToMatch}>
-          <div className="quick-action-icon">
-            <Trophy size={18} />
-          </div>
-          <span>Match Prep</span>
-        </button>
-
-        <button className="quick-action-btn" onClick={onNavigateToTeam}>
-          <div className="quick-action-icon">
-            <Users size={18} />
-          </div>
-          <span>Team</span>
-        </button>
+        {quickActions.map(qa => (
+          <button key={qa.id} className="quick-action-btn" onClick={() => handleActionClick(qa.action)}>
+            <div className="quick-action-icon">
+              {qa.icon === 'train' && <Dumbbell size={18} />}
+              {qa.icon === 'drill' && <BookOpen size={18} />}
+              {qa.icon === 'match' && <Trophy size={18} />}
+              {qa.icon === 'team' && <Users size={18} />}
+            </div>
+            <span>{qa.label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* 3. WORTH A LOOK / COACHING NOTES (ONLY rendered when notes exist) */}
+      {/* 3. WORTH A LOOK (HIGH PRIORITY — MAX 3, ENTIRE ROW TAPPABLE) */}
       {coachingNotes.length > 0 && (
         <section className="home-section">
           <div className="home-section-header">
             <span>WORTH A LOOK</span>
-            <Sparkles size={14} color="var(--accent-gold)" />
+            {totalCoachingNotesCount > 3 ? (
+              <button
+                onClick={onNavigateToTeam}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+              >
+                View all {totalCoachingNotesCount} <ChevronRight size={12} />
+              </button>
+            ) : (
+              <Sparkles size={14} color="var(--accent-gold)" />
+            )}
           </div>
           <div className="home-insight-card">
             {coachingNotes.map(note => (
-              <div 
-                key={note.id} 
+              <div
+                key={note.id}
                 className={`home-insight-row ${note.type === 'workload' ? 'gold-accent' : note.type === 'plan' ? 'warning-accent' : 'green-accent'}`}
+                onClick={note.target === 'team' ? onNavigateToTeam : note.target === 'match' ? onNavigateToMatch : onNavigateToTrain}
+                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
               >
                 <div className="home-insight-info">
                   <div className="home-insight-title">{note.title}</div>
                   <div className="home-insight-desc">{note.description}</div>
                 </div>
-                <button 
-                  className="btn-mini-action"
-                  onClick={note.target === 'team' ? onNavigateToTeam : note.target === 'match' ? onNavigateToMatch : onNavigateToTrain}
-                >
-                  {note.target === 'team' ? 'VIEW PLAYER' : 'REVIEW SESSION'}
-                </button>
+                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* 4. PLAYER FOCUS (ONLY rendered when players need attention) */}
+      {/* 4. PLAYER FOCUS (NORMAL DEVELOPMENT — MAX 3, DEDUPLICATED, ENTIRE ROW TAPPABLE) */}
       {playerFocusItems.length > 0 && (
         <section className="home-section">
           <div className="home-section-header">
-            <span>PLAYER FOCUS ({playerFocusItems.length} worth checking)</span>
-            <button 
-              onClick={onNavigateToTeam} 
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>PLAYER FOCUS</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{totalPlayerFocusCount} active</span>
+            </div>
+            <button
+              onClick={onNavigateToTeam}
               style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
             >
               View all <ChevronRight size={12} />
@@ -559,21 +579,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <div className="home-insight-card">
             {playerFocusItems.map(item => (
-              <div key={item.id} className="home-insight-row gold-accent">
+              <div
+                key={item.id}
+                className="home-insight-row green-accent"
+                onClick={onNavigateToTeam}
+                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
                 <div className="home-insight-info">
                   <div className="home-insight-title">{item.name}</div>
-                  <div className="home-insight-desc">{item.reason}</div>
+                  <div className="home-insight-desc">
+                    <strong style={{ color: 'var(--accent-gold)' }}>{item.domain}:</strong> {item.focusStatement}
+                  </div>
                 </div>
-                <button className="btn-mini-action" onClick={onNavigateToTeam}>
-                  VIEW PLAYER
-                </button>
+                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* 5. UP NEXT (Max 2 upcoming chronological items) */}
+      {/* 5. UP NEXT (MAX 2 CHRONOLOGICAL UPCOMING ITEMS) */}
       {upNextItems.length > 0 && (
         <section className="home-section">
           <div className="home-section-header">
@@ -582,7 +607,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <div className="up-next-card">
             {upNextItems.map(item => (
-              <div key={item.id} className="up-next-row">
+              <div
+                key={item.id}
+                className="up-next-row"
+                onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="up-next-left">
                   <div className="up-next-day">
                     <span className="day-name">{item.dayName}</span>
@@ -593,19 +623,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div className="up-next-sub">{item.subtext}</div>
                   </div>
                 </div>
-                <button 
-                  className="btn-mini-action" 
-                  onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
-                >
-                  {item.type === 'session' ? 'VIEW' : 'MATCH PREP'}
-                </button>
+                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* 6. RECENT ACTIVITY (ONLY rendered when completed items exist) */}
+      {/* 6. RECENT ACTIVITY (MAX 1-2 ITEMS, ENTIRE ROW TAPPABLE) */}
       {recentActivityItems.length > 0 && (
         <section className="home-section">
           <div className="home-section-header">
@@ -613,17 +638,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
           <div className="home-insight-card">
             {recentActivityItems.map(item => (
-              <div key={item.id} className="home-insight-row">
+              <div
+                key={item.id}
+                className="home-insight-row"
+                onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
+                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
                 <div className="home-insight-info">
                   <div className="home-insight-title">{item.title}</div>
                   <div className="home-insight-desc">{item.meta}</div>
                 </div>
-                <button 
-                  className="btn-mini-action"
-                  onClick={item.type === 'session' ? onNavigateToTrain : onNavigateToMatch}
-                >
-                  {item.type === 'session' ? 'Review Session' : 'Review Match'}
-                </button>
+                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0, marginLeft: '8px' }} />
               </div>
             ))}
           </div>

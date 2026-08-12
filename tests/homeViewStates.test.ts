@@ -240,11 +240,10 @@ describe('HomeView deriveHomeState acceptance tests', () => {
 
     expect(state.coachingNotes).toHaveLength(1);
     expect(state.coachingNotes[0].title).toBe('Ryan Clarke');
-    expect(state.coachingNotes[0].description).toContain('Bowling workload restriction active');
+    expect(state.coachingNotes[0].description).toContain('Bowling workload');
 
-    expect(state.playerFocusItems).toHaveLength(1);
-    expect(state.playerFocusItems[0].name).toBe('Ryan Clarke');
-    expect(state.playerFocusItems[0].reason).toContain('Bowling workload restriction');
+    // Deduplicated: Player with workload in Worth a Look is excluded from Player Focus to prevent duplicate entry
+    expect(state.playerFocusItems).toHaveLength(0);
   });
 
   it('STATE H: No coaching alerts -> sections are empty arrays so UI hides them completely', () => {
