@@ -54,7 +54,6 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Initialize positions: if initialPositions provided and valid, use them; else load preset for batter hand
   const [positions, setPositions] = useState<FieldSpot[]>(() => {
     if (initialPositions && initialPositions.length === 10) {
       return initialPositions;
@@ -81,7 +80,6 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
   const handleBatterHandToggle = (hand: BattingHand) => {
     setBatterHand(hand);
-    // Mirror current positions across x=50
     setPositions(prev =>
       prev.map(p => ({
         ...p,
@@ -110,13 +108,9 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
     const xPercent = Math.round((xPx / rect.width) * 100);
     const yPercent = Math.round((yPx / rect.height) * 100);
 
-    // Compute depth dynamically based on distance from center pitch (50, 50)
     const distFromCenter = Math.sqrt(Math.pow(xPercent - 50, 2) + Math.pow(yPercent - 50, 2));
-    const isOutfield = distFromCenter > 32; // Beyond 30-yard circle (~32% radius)
+    const isOutfield = distFromCenter > 32;
 
-    // Compute whether behind square on leg side:
-    // For RHB: leg side is x > 50. Behind popping crease is y > 60.
-    // For LHB: leg side is x < 50. Behind popping crease is y > 60.
     const isLegSide = batterHand === 'right' ? xPercent > 50 : xPercent < 50;
     const isBehindSquare = isLegSide && yPercent > 60;
 
@@ -139,32 +133,26 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
     if (draggingId) setDraggingId(null);
   };
 
-  // Legality Calculations & Validation
   const countKeeper = positions.filter(p => p.id === 'wk').length;
-  // Trust each position's own `depth` label rather than re-deriving it from raw
-  // coordinates: authored presets tag depth directly (fieldPresets.ts), and a
-  // dragged fielder already gets its depth recomputed geometrically in
-  // handlePointerMove above. Recomputing again here from x/y disagreed with the
-  // authored labels for several shipped presets and flagged them illegal on load.
   const countOutsideCircle = positions.filter(p => p.depth === 'outfield' || p.depth === 'boundary').length;
   const countBehindSquareLeg = positions.filter(p => p.behindSquareLeg && p.id !== 'wk').length;
   const countLegSideTotal = positions.filter(p => p.side === 'leg' && p.id !== 'wk').length;
 
   const validationErrors: string[] = [];
   if (positions.length !== 10) {
-    validationErrors.push(`Field must contain exactly 10 markers (1 Wicketkeeper + 9 Fielders; Bowler is separate). Currently: ${positions.length}`);
+    validationErrors.push(`Field must contain exactly 10 markers. Currently: ${positions.length}`);
   }
   if (countKeeper !== 1) {
     validationErrors.push('Field must contain exactly 1 Wicketkeeper.');
   }
   if (countBehindSquareLeg > maxBehindSquareLeg) {
-    validationErrors.push(`Illegal field: ${countBehindSquareLeg} fielders behind square on the leg side (max permitted: ${maxBehindSquareLeg}).`);
+    validationErrors.push(`Illegal field: ${countBehindSquareLeg} fielders behind square (max: ${maxBehindSquareLeg}).`);
   }
   if (countOutsideCircle > maxOutsideCircle) {
-    validationErrors.push(`Illegal field: ${countOutsideCircle} fielders outside 30-yard circle (current phase max: ${maxOutsideCircle}).`);
+    validationErrors.push(`Illegal field: ${countOutsideCircle} fielders outside circle (max: ${maxOutsideCircle}).`);
   }
   if (maxTotalLegSide && countLegSideTotal > maxTotalLegSide) {
-    validationErrors.push(`Illegal field: ${countLegSideTotal} leg-side fielders (competition max: ${maxTotalLegSide}).`);
+    validationErrors.push(`Illegal field: ${countLegSideTotal} leg-side fielders (max: ${maxTotalLegSide}).`);
   }
 
   const isLegal = validationErrors.length === 0;
@@ -220,14 +208,14 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby="field-board-title" className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="field-board-title" className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto', maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
-              TACTICAL FIELD BOARD {bowlerName ? `• ${bowlerName}` : ''}
+            <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 800, textTransform: 'uppercase' }}>
+              TACTICAL FIELD {bowlerName ? `• ${bowlerName}` : ''}
             </div>
-            <div id="field-board-title" style={{ fontSize: '1.2rem', fontWeight: 800 }}>{planTitle || 'Tactical Field Setting'}</div>
+            <div id="field-board-title" style={{ fontSize: '1.15rem', fontWeight: 800 }}>{planTitle || 'Tactical Field Setting'}</div>
           </div>
           <button
             type="button"
@@ -241,7 +229,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
         {/* Validation Errors & Status Bar */}
         {!isLegal ? (
-          <div style={{ background: 'rgba(231, 111, 81, 0.15)', border: '1px solid #f97316', padding: '8px 12px', borderRadius: '8px', marginBottom: '10px', fontSize: '0.78rem', color: '#f97316', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div style={{ background: 'rgba(231, 111, 81, 0.15)', border: '1px solid #f97316', padding: '6px 10px', borderRadius: '6px', marginBottom: '8px', fontSize: '0.75rem', color: '#f97316', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {validationErrors.map((err, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <AlertTriangle size={14} />
@@ -250,20 +238,19 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             ))}
           </div>
         ) : (
-          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--primary-green-light)', padding: '6px 12px', borderRadius: '8px', marginBottom: '10px', fontSize: '0.75rem', color: 'var(--primary-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--primary-green-light)', padding: '6px 10px', borderRadius: '6px', marginBottom: '8px', fontSize: '0.72rem', color: 'var(--primary-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Check size={14} />
-              <span>Legal Field Setting Verified (1 Keeper + 9 Fielders)</span>
+              <span>Legal Field (1 Keeper + 9 Fielders)</span>
             </div>
-            <span>Outside Circle: {countOutsideCircle}/{maxOutsideCircle} • Behind Square: {countBehindSquareLeg}/{maxBehindSquareLeg}</span>
+            <span>Outside: {countOutsideCircle}/{maxOutsideCircle}</span>
           </div>
         )}
 
         {/* Controls: Batter Hand & Preset Selection */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-          <div style={{ flex: 1, minWidth: '140px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>STRIKER HAND</label>
-            <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', gap: '4px' }}>
               <button
                 type="button"
                 onClick={() => handleBatterHandToggle('right')}
@@ -299,15 +286,13 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             </div>
           </div>
 
-          <div style={{ flex: 2, minWidth: '200px' }}>
-            <label style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 700 }}>LOAD TACTICAL PRESET</label>
+          <div style={{ flex: 2 }}>
             <select
               value={selectedPresetId}
               onChange={e => loadPreset(e.target.value, batterHand)}
               style={{
                 width: '100%',
                 padding: '6px',
-                marginTop: '2px',
                 background: 'var(--bg-surface-card)',
                 border: '1px solid var(--border-light)',
                 borderRadius: '6px',
@@ -317,7 +302,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             >
               {TACTICAL_FIELD_PRESETS.map(preset => (
                 <option key={preset.id} value={preset.id}>
-                  {preset.name} ({preset.intent.toUpperCase()})
+                  Preset: {preset.name}
                 </option>
               ))}
             </select>
@@ -325,43 +310,39 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
         </div>
 
         {onSaveSetting && (
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '8px' }}>
             <button
               type="button"
               onClick={() => setIsSettingsManagerOpen(open => !open)}
               aria-expanded={isSettingsManagerOpen}
               className="btn btn-secondary"
-              style={{ width: '100%', justifyContent: 'space-between', fontSize: '0.8rem' }}
+              style={{ width: '100%', justifyContent: 'space-between', fontSize: '0.75rem', height: '30px' }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Settings size={14} />
-                Manage saved settings {settingName ? `— ${settingName}` : ''}
+                Saved settings {settingName ? `— ${settingName}` : ''}
               </span>
-              {isSettingsManagerOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {isSettingsManagerOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
 
             {isSettingsManagerOpen && (
-              <div className="card" style={{ display: 'grid', gap: '8px', marginTop: '8px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
-                  <label>Saved setting<select value={selectedSettingId} onChange={event => loadSavedSetting(event.target.value)}><option value="">New setting</option>{savedSettings.map(setting => <option key={setting.id} value={setting.id}>{setting.name}</option>)}</select></label>
-                  <label>Setting name<input value={settingName} onChange={event => setSettingName(event.target.value)} placeholder="e.g. New-ball pressure" /></label>
-                  <label>Bowler style<select value={bowlerStyle} onChange={event => setBowlerStyle(event.target.value as 'pace' | 'spin')}><option value="pace">Pace</option><option value="spin">Spin</option></select></label>
-                  <label>Tactical phase<select value={tacticalPhase} onChange={event => setTacticalPhase(event.target.value as TacticalPhase)}><option value="new_ball">New ball</option><option value="powerplay">Powerplay</option><option value="middle_overs">Middle overs</option><option value="death">Death</option><option value="old_ball">Old ball</option></select></label>
+              <div className="card" style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px' }}>
+                  <label style={{ fontSize: '0.7rem' }}>Saved setting<select value={selectedSettingId} onChange={event => loadSavedSetting(event.target.value)}><option value="">New setting</option>{savedSettings.map(setting => <option key={setting.id} value={setting.id}>{setting.name}</option>)}</select></label>
+                  <label style={{ fontSize: '0.7rem' }}>Setting name<input value={settingName} onChange={event => setSettingName(event.target.value)} placeholder="e.g. New-ball pressure" /></label>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  <button className="btn btn-secondary" onClick={() => persistSetting('save_as')} disabled={!settingName.trim() || !isLegal}>Save as</button>
-                  <button className="btn btn-secondary" onClick={() => persistSetting('update')} disabled={!selectedSettingId || !isLegal}>Update</button>
-                  <button className="btn btn-secondary" onClick={() => persistSetting('duplicate')} disabled={!selectedSettingId || !isLegal}>Duplicate</button>
-                  <button className="btn btn-secondary" onClick={deleteSetting} disabled={!selectedSettingId}>Delete</button>
-                  {matchId && <button className="btn btn-gold" onClick={() => persistSetting('attach')} disabled={!settingName.trim() || !isLegal}>Attach to match</button>}
+                  <button className="btn btn-secondary" onClick={() => persistSetting('save_as')} disabled={!settingName.trim() || !isLegal} style={{ fontSize: '0.7rem' }}>Save as</button>
+                  <button className="btn btn-secondary" onClick={() => persistSetting('update')} disabled={!selectedSettingId || !isLegal} style={{ fontSize: '0.7rem' }}>Update</button>
+                  <button className="btn btn-secondary" onClick={deleteSetting} disabled={!selectedSettingId} style={{ fontSize: '0.7rem' }}>Delete</button>
                 </div>
-                {saveMessage && <div role="status" style={{ color: 'var(--primary-green-light)', fontSize: '0.78rem' }}>{saveMessage}</div>}
+                {saveMessage && <div role="status" style={{ color: 'var(--primary-green-light)', fontSize: '0.75rem' }}>{saveMessage}</div>}
               </div>
             )}
           </div>
         )}
 
-        {/* Cricket Oval Pitch Canvas */}
+        {/* Cricket Oval Pitch Canvas (Dominant Visual) */}
         <div
           ref={canvasRef}
           onPointerMove={handlePointerMove}
@@ -369,7 +350,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
           style={{
             position: 'relative',
             width: '100%',
-            height: '330px',
+            height: '340px',
             background: 'radial-gradient(circle, #1a4733 0%, #0d291e 75%, #081711 100%)',
             borderRadius: '16px',
             border: '2px solid var(--primary-green-light)',
@@ -379,7 +360,6 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             touchAction: 'none'
           }}
         >
-          {/* Short Boundary Indicator if supplied */}
           {shortBoundarySide && shortBoundarySide !== 'straight' && (
             <div
               style={{
@@ -439,7 +419,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
             <div style={{ width: '16px', height: '2px', background: '#ffffff' }} />
           </div>
 
-          {/* Bowler Marker at top of pitch (implicit bowler displayed separately) */}
+          {/* Bowler Marker */}
           <div
             style={{
               position: 'absolute',
@@ -520,24 +500,23 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
 
         {/* Selected Fielder Role Tooltip */}
         {selectedFielder && (
-          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-gold)', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-gold)', borderRadius: '8px', padding: '6px 10px', marginBottom: '8px', fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Info size={16} color="var(--accent-gold)" />
             <div>
               <strong style={{ color: 'var(--accent-gold)' }}>{selectedFielder.name} ({selectedFielder.side.toUpperCase()}): </strong>
               <span>{selectedFielder.role}</span>
-              {selectedFielder.behindSquareLeg && <span style={{ color: '#f97316', marginLeft: '6px', fontWeight: 700 }}>(Behind Square Leg)</span>}
             </div>
           </div>
         )}
 
         {/* Footer Actions */}
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={handleResetToPreset} style={{ flex: 1, fontSize: '0.8rem' }}>
-            <RotateCcw size={14} /> RESET PRESET
+          <button className="btn btn-secondary" onClick={handleResetToPreset} style={{ flex: 1, fontSize: '0.78rem' }}>
+            <RotateCcw size={14} /> Reset
           </button>
 
-          {onSaveField ? <button className="btn btn-gold" onClick={handleSave} disabled={!isLegal} style={{ flex: 2, opacity: isLegal ? 1 : 0.5 }}><Shield size={16} /> SAVE FIELD SETTING</button>
-            : <button className="btn btn-gold" onClick={onClose} style={{ flex: 2 }}>CLOSE</button>}
+          {onSaveField ? <button className="btn btn-gold" onClick={handleSave} disabled={!isLegal} style={{ flex: 2, opacity: isLegal ? 1 : 0.5 }}><Shield size={16} /> Save Field Setting</button>
+            : <button className="btn btn-gold" onClick={onClose} style={{ flex: 2 }}>Close</button>}
         </div>
       </div>
     </div>

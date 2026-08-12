@@ -343,9 +343,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
               <div className="prep-checklist-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>MATCH PREP</h3>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {workflowStatus.completedCount} of 4 ready
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>
+                      {workflowStatus.completedCount === 4 ? 'MATCH READY' : 'MATCH PREP'}
+                    </h3>
+                    <div style={{ fontSize: '0.78rem', color: workflowStatus.completedCount === 4 ? '#4ade80' : 'var(--text-secondary)', marginTop: '2px', fontWeight: 700 }}>
+                      {workflowStatus.completedCount} of 4 {workflowStatus.completedCount === 4 ? 'complete' : 'ready'}
                     </div>
                   </div>
                   <button 
@@ -353,11 +355,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
                     onClick={() => setIsPrepWizardOpen(true)}
                     style={{ width: 'auto', padding: '0 12px', height: '34px', fontSize: '0.75rem' }}
                   >
-                    Continue Preparation <ArrowRight size={14} />
+                    {workflowStatus.completedCount === 4 ? 'View Game Plan' : 'Continue Preparation'} <ArrowRight size={14} />
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
                   {[
                     { label: 'Squad', complete: workflowStatus.squad, stage: 1 },
                     { label: 'Opponent', complete: workflowStatus.opposition, stage: 2 },
@@ -371,11 +373,15 @@ export const MatchView: React.FC<MatchViewProps> = ({
                         setTacticalStage(item.stage as any);
                         setIsPrepWizardOpen(true);
                       }}
+                      style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     >
                       <span>{item.complete ? '✓ ' : '○ '}{item.label}</span>
-                      <span style={{ fontSize: '0.75rem', color: item.complete ? '#4ade80' : 'var(--text-muted)' }}>
-                        {item.complete ? 'Complete' : 'Not started'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.75rem', color: item.complete ? '#4ade80' : 'var(--text-muted)' }}>
+                          {item.complete ? 'Complete' : 'Not started'}
+                        </span>
+                        <ChevronRight size={14} color="var(--text-muted)" />
+                      </div>
                     </div>
                   ))}
                 </div>
