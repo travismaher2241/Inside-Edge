@@ -235,14 +235,13 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>{team.name}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        {reports.length} match note{reports.length === 1 ? '' : 's'} · {latestReport ? `Last submitted ${new Date(latestReport.createdAt).toLocaleDateString()}` : 'No report'}
+                        {reports.length > 0
+                          ? `${reports.length} coaching note${reports.length === 1 ? '' : 's'}${latestReport ? ` · Last ${new Date(latestReport.createdAt).toLocaleDateString()}` : ''}`
+                          : 'No report yet'}
                       </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span className={`badge ${reports.length > 0 ? 'badge-green' : 'badge-warning'}`}>
-                        {reports.length > 0 ? 'SUBMITTED' : 'AWAITING'}
-                      </span>
                       {isExpanded ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
                     </div>
                   </div>
