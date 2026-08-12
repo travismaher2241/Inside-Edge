@@ -10,7 +10,7 @@ import type {
 import { ClubSessionWizard } from './ClubSessionWizard';
 import { FairnessReviewPanel } from './FairnessReviewPanel';
 import { TrainingTemplateManager } from './TrainingTemplateManager';
-import { Plus, Play, Layers } from 'lucide-react';
+import { Play, Dumbbell } from 'lucide-react';
 
 interface ClubTrainingPlannerProps {
   teams: ClubTeam[];
@@ -43,7 +43,9 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
   });
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
   const [selectedTemplate, setSelectedTemplate] = useState<SavedClubTemplate | undefined>();
+  
   const activityBlocks = currentSession?.blocks.filter(block => block.type !== 'rotation') ?? [];
+
   const selectTab = (tab: 'schedule' | 'templates' | 'fairness') => {
     setActiveTab(tab);
     if (typeof localStorage !== 'undefined') localStorage.setItem('inside_edge_training_tab', tab);
@@ -51,155 +53,112 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      {/* Header & Main Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>DYNAMIC CLUB SYSTEM</div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Club Training Planner</h1>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          <button className="btn btn-secondary" onClick={() => setIsWizardOpen(true)} style={{ width: 'auto', padding: '0 10px', height: '36px', fontSize: '0.75rem' }}>
-            <Plus size={14} /> NEW SESSION WIZARD
-          </button>
-          {currentSession && (
-            <button className="btn btn-live" onClick={() => onStartLive(currentSession)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
-              <Play size={16} /> LIVE MODE
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Tab Selector */}
-      <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: '10px', padding: '4px' }}>
+      <div className="train-tab-selector">
         <button
+          className={`train-tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
           onClick={() => selectTab('schedule')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'schedule' ? 'var(--primary-green)' : 'transparent',
-            color: activeTab === 'schedule' ? '#fff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.8rem',
-            cursor: 'pointer'
-          }}
         >
-          SESSION PLANNER
+          SESSION
         </button>
         <button
+          className={`train-tab-btn ${activeTab === 'templates' ? 'active' : ''}`}
           onClick={() => selectTab('templates')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'templates' ? 'var(--primary-green)' : 'transparent',
-            color: activeTab === 'templates' ? '#fff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.8rem',
-            cursor: 'pointer'
-          }}
         >
-          CLUB TEMPLATES ({savedTemplates.length})
+          TEMPLATES
         </button>
         <button
+          className={`train-tab-btn ${activeTab === 'fairness' ? 'active' : ''}`}
           onClick={() => selectTab('fairness')}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'fairness' ? 'var(--primary-green)' : 'transparent',
-            color: activeTab === 'fairness' ? '#fff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.8rem',
-            cursor: 'pointer'
-          }}
         >
-          FAIRNESS LEDGER
+          SQUAD BALANCE
         </button>
       </div>
 
-      {/* Schedule Tab */}
+      {/* 1. SESSION PLANNER TAB */}
       {activeTab === 'schedule' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {currentSession ? (
-            <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--accent-gold)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span className="badge badge-gold" style={{ fontSize: '0.65rem' }}>ACTIVE SESSION</span>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginTop: '4px' }}>{currentSession.title}</h2>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    📅 {currentSession.date} ({currentSession.startTime} - {currentSession.finishTime})
-                  </div>
-                </div>
+            <div className="home-primary-card">
+              <div className="home-primary-badge-row">
+                <span className={`badge ${currentSession.status === 'live' ? 'badge-live' : 'badge-gold'}`}>
+                  {currentSession.status === 'live' ? 'LIVE SESSION' : 'NEXT TRAINING'}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  {currentSession.date}
+                </span>
+              </div>
 
-                <button className="btn btn-live" onClick={() => onStartLive(currentSession)} style={{ width: 'auto', padding: '0 12px', height: '36px' }}>
-                  <Play size={16} /> START LIVE
-                </button>
+              <h2 className="home-primary-title">{currentSession.title}</h2>
+              <div className="home-primary-meta">
+                <span>{currentSession.startTime} - {currentSession.finishTime}</span>
+                <span>·</span>
+                <span>{currentSession.confirmedAttendingPlayerIds.length} players</span>
               </div>
 
               {/* Objectives Pill Bar */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
-                {currentSession.sessionObjectives.map((obj, i) => (
-                  <span key={i} className="badge badge-green">🎯 {obj}</span>
-                ))}
-              </div>
+              {currentSession.sessionObjectives.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
+                  {currentSession.sessionObjectives.map((obj, i) => (
+                    <span key={i} className="badge badge-green">🎯 {obj}</span>
+                  ))}
+                </div>
+              )}
 
+              {/* Session Activities Overview */}
               {activityBlocks.length > 0 && (
                 <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
-                    SESSION ACTIVITIES ({activityBlocks.length})
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                    Activities ({activityBlocks.length})
                   </div>
-                  {activityBlocks.map(block => (
-                    <div key={block.id} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', fontSize: '0.78rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontWeight: 700 }}>
+                  {activityBlocks.slice(0, 3).map(block => (
+                    <div key={block.id} style={{ background: 'var(--bg-surface-elevated)', padding: '10px 12px', borderRadius: '8px', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
                         <span>{block.title}</span>
-                        <span style={{ color: 'var(--accent-gold)', whiteSpace: 'nowrap' }}>{block.durationMinutes} mins</span>
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        {block.location ? `${block.location} · ` : ''}{block.objective}
+                        <span style={{ color: 'var(--accent-gold)' }}>{block.durationMinutes} mins</span>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Rotation Block Summary */}
-              <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
-                  ROTATION BLOCKS ({currentSession.rotationPlan.length})
-                </div>
-                {currentSession.rotationPlan.map(block => (
-                  <div key={block.blockId} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', fontSize: '0.78rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                      <span>Block {block.blockIndex + 1} ({block.startTime} - {block.endTime})</span>
-                      <span style={{ color: 'var(--accent-gold)' }}>{block.durationMinutes} Mins</span>
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      {block.resourceAssignments.length} active resources allocated.
-                    </div>
-                  </div>
-                ))}
+              {/* Actions */}
+              <div className="home-primary-actions">
+                <button className="btn btn-live" onClick={() => onStartLive(currentSession)}>
+                  <Play size={18} /> OPEN SESSION
+                </button>
+                <button className="btn btn-secondary" onClick={() => setIsWizardOpen(true)}>
+                  Edit Plan
+                </button>
               </div>
             </div>
           ) : (
-            <div className="card" style={{ textAlign: 'center', padding: '32px' }}>
-              <Layers size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px auto' }} />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>No Active Club Session Planned</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px', marginBottom: '16px' }}>
-                Create a dynamic schedule for any number of teams and active resources.
+            <div className="card" style={{ padding: '24px 16px', textAlign: 'center', background: 'var(--bg-surface-card)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                TRAINING
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>No training planned</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', marginBottom: '20px' }}>
+                Create your next session, assign activities and organise your groups.
               </p>
-              <button className="btn btn-gold" onClick={() => setIsWizardOpen(true)} style={{ width: 'auto', padding: '0 16px' }}>
-                <Plus size={16} /> LAUNCH PLANNING WIZARD
+              
+              <button 
+                className="btn btn-gold" 
+                onClick={() => setIsWizardOpen(true)}
+                style={{ width: '100%', maxWidth: '280px', margin: '0 auto' }}
+              >
+                <Dumbbell size={18} /> Plan Training
               </button>
+
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '14px' }}>
+                Use a club template or start from scratch
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Templates Tab */}
+      {/* 2. TEMPLATES TAB */}
       {activeTab === 'templates' && (
         <TrainingTemplateManager
           templates={savedTemplates}
@@ -215,7 +174,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
         />
       )}
 
-      {/* Fairness Ledger Tab */}
+      {/* 3. SQUAD BALANCE TAB */}
       {activeTab === 'fairness' && (
         <FairnessReviewPanel
           players={players}

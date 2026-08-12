@@ -4,7 +4,7 @@ import type { TacticalContext, FieldSpot, BowlingPlan } from '../modules/cricket
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
 import { getMatchWorkflowStatus } from '../modules/cricket/matchWorkflow';
 import { StorageEngine } from '../storage/db';
-import { CheckCircle2, AlertCircle, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target } from 'lucide-react';
+import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target, ChevronRight } from 'lucide-react';
 
 import { MatchSquadSelector } from '../components/cricket/tactics/MatchSquadSelector';
 import { OppositionBatterManager } from '../components/cricket/tactics/OppositionBatterManager';
@@ -50,12 +50,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
   // Editable Match Result
   const [matchResultText, setMatchResultText] = useState<string>(currentMatch?.result || '');
 
-  // Derived Training Priorities state (local editing buffer for the selected match)
-  const [derivedPriorities, setDerivedPriorities] = useState<string[]>(
+  // Derived Training Priorities state (local editing buffer)
+  const [trainingPriorities, setTrainingPriorities] = useState<string[]>(
     currentMatch?.postMatchReview?.trainingPrioritiesDerived || []
   );
   const [newPriorityInput, setNewPriorityInput] = useState<string>('');
-
 
   // Pre-Match Opposition Tactical Planning State
   const [tacticalStage, setTacticalStage] = useState<1 | 2 | 3 | 4>(1);
@@ -84,18 +83,16 @@ export const MatchView: React.FC<MatchViewProps> = ({
     positions?: FieldSpot[];
   }>({ isOpen: false });
 
-  // Keep derivedPriorities buffer in sync when switching match
-  const handleSelectMatch = (matchId: string) => {
-    onSelectMatch(matchId);
-    const target = matches.find(m => m.id === matchId);
-    setDerivedPriorities(target?.postMatchReview?.trainingPrioritiesDerived || []);
+  const handleSelectMatch = (id: string) => {
+    onSelectMatch(id);
+    const target = matches.find(m => m.id === id);
+    setTrainingPriorities(target?.postMatchReview?.trainingPrioritiesDerived || []);
     setMatchResultText(target?.result || '');
     setIsAddObservationOpen(false);
 
-    // Sync tactical state for newly selected match
-    setMatchSquad(StorageEngine.getMatchSquad(matchId));
-    setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
-    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+    setMatchSquad(StorageEngine.getMatchSquad(id));
+    setOppositionBatters(StorageEngine.getOppositionBatters(id));
+    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(id));
     setTacticalContext(previous => ({
       ...previous,
       format: target?.format === 'Two Day' ? 'multi_day' : target?.format === 'T20' ? 't20' : 'one_day',
@@ -106,19 +103,14 @@ export const MatchView: React.FC<MatchViewProps> = ({
     setIsPrepWizardOpen(false);
   };
 
-  // A newly created match isn't in the `matches` prop yet (parent state update is
-  // async), so reset the buffer from the match object itself rather than looking it
-  // up — this is also what prevents the previously-selected match's priorities from
-  // bleeding into the new one.
   const handleCreateMatch = (match: MatchRecord) => {
     onAddMatch(match);
     onSelectMatch(match.id);
-    setDerivedPriorities(match.postMatchReview?.trainingPrioritiesDerived || []);
+    setTrainingPriorities(match.postMatchReview?.trainingPrioritiesDerived || []);
     setMatchResultText(match.result || '');
     setIsAddObservationOpen(false);
   };
 
-  // Save new observation to current match
   const handleAddObservation = () => {
     if (!obsText.trim() || !currentMatch) return;
 
@@ -131,10 +123,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
     const existingReview = currentMatch.postMatchReview;
     const updatedObservations = [...(existingReview?.observations || []), newObs];
-
-    // Recalculate derived priorities by combining newly suggested priority
     const autoDerived = deriveTrainingPriorities(updatedObservations);
-    const updatedPriorities = [...new Set([...derivedPriorities, ...autoDerived])];
+    const updatedPriorities = [...new Set([...trainingPriorities, ...autoDerived])];
 
     const updatedMatch: MatchRecord = {
       ...currentMatch,
@@ -147,29 +137,24 @@ export const MatchView: React.FC<MatchViewProps> = ({
     };
 
     onUpdateMatch(updatedMatch);
-    setDerivedPriorities(updatedPriorities);
+    setTrainingPriorities(updatedPriorities);
     setObsText('');
     setObsSuggestedPriority('');
     setIsAddObservationOpen(false);
   };
 
-  // Add a priority manually
   const handleAddPriority = () => {
     const trimmed = newPriorityInput.trim();
-    if (!trimmed) return;
-    if (derivedPriorities.includes(trimmed)) return;
-    const updated = [...derivedPriorities, trimmed];
-    setDerivedPriorities(updated);
+    if (!trimmed || trainingPriorities.includes(trimmed)) return;
+    const updated = [...trainingPriorities, trimmed];
+    setTrainingPriorities(updated);
     setNewPriorityInput('');
-
-    // Persist to match
     saveUpdatedPriorities(updated);
   };
 
-  // Remove a priority
   const handleRemovePriority = (index: number) => {
-    const updated = derivedPriorities.filter((_, i) => i !== index);
-    setDerivedPriorities(updated);
+    const updated = trainingPriorities.filter((_, i) => i !== index);
+    setTrainingPriorities(updated);
     saveUpdatedPriorities(updated);
   };
 
@@ -188,8 +173,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
   };
 
   const handleApplyPriorities = () => {
-    if (derivedPriorities.length === 0) return;
-    onApplyPrioritiesToSession(derivedPriorities);
+    if (trainingPriorities.length === 0) return;
+    onApplyPrioritiesToSession(trainingPriorities);
   };
 
   if (!currentMatch) {
@@ -197,7 +182,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
       <div style={{ padding: '24px', textAlign: 'center' }}>
         <h2>No matches available</h2>
         <button className="btn btn-gold" onClick={() => setIsAddMatchOpen(true)} style={{ marginTop: '16px' }}>
-          <Plus size={16} /> ADD FIRST MATCH FIXTURE
+          <Plus size={16} /> Add First Match
         </button>
         {isAddMatchOpen && (
           <MatchCreationModal
@@ -209,578 +194,583 @@ export const MatchView: React.FC<MatchViewProps> = ({
     );
   }
 
-  const isReviewed = Boolean(currentMatch.postMatchReview && currentMatch.postMatchReview.observations.length > 0);
+  const isCompleted = Boolean(currentMatch.result || (currentMatch.date < new Date().toISOString().split('T')[0]));
+  const isMatchDay = currentMatch.date === new Date().toISOString().split('T')[0];
   const workflowStatus = getMatchWorkflowStatus(matchSquad, oppositionBatters, tacticalContext.localRulesConfirmed, selectedRulesProfileId, savedTacticalPlans);
+  const observationCount = currentMatch.postMatchReview?.observations.length || 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* View Mode Toggle: Match Fixtures vs Weekly Round-Up */}
-      <div style={{ display: 'flex', background: 'var(--bg-surface-card)', borderRadius: 'var(--radius-md)', padding: '4px', border: '1px solid var(--border-light)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Top Selector: Fixtures & Review vs Weekly Club Round-Up */}
+      <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-md)', padding: '4px', gap: '4px' }}>
         <button
           onClick={() => setViewMode('fixtures')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            borderRadius: 'var(--radius-sm)',
-            border: 'none',
-            background: viewMode === 'fixtures' ? 'var(--primary-green)' : 'transparent',
-            color: viewMode === 'fixtures' ? '#ffffff' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: '0.88rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
+          className={`train-tab-btn ${viewMode === 'fixtures' ? 'active' : ''}`}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
-          <Trophy size={16} /> MATCH FIXTURES & REVIEW
+          <Trophy size={14} /> MATCHES
         </button>
         <button
           onClick={() => setViewMode('roundup')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            borderRadius: 'var(--radius-sm)',
-            background: viewMode === 'roundup' ? 'var(--accent-gold-soft)' : 'transparent',
-            color: viewMode === 'roundup' ? 'var(--accent-gold)' : 'var(--text-secondary)',
-            border: viewMode === 'roundup' ? '1px solid var(--border-gold)' : '1px solid transparent',
-            fontWeight: 700,
-            fontSize: '0.88rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
+          className={`train-tab-btn ${viewMode === 'roundup' ? 'active' : ''}`}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
-          <Calendar size={16} /> WEEKLY CLUB ROUND-UP
+          <Calendar size={14} /> CLUB ROUND-UP
         </button>
       </div>
 
       {viewMode === 'roundup' ? (
-        <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading Weekly Round-Up...</div>}>
+        <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading club themes...</div>}>
           <WeeklyRoundupView onApplyPrioritiesToSession={onApplyPrioritiesToSession} />
         </Suspense>
       ) : (
-
         <>
           {/* Header & New Match Action */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH COACHING MODULE</div>
-              <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Matches ({matches.length})</h1>
+              <h1 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Matches</h1>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                {matches.length} fixture{matches.length === 1 ? '' : 's'}
+              </div>
             </div>
             <button className="btn btn-gold" onClick={() => setIsAddMatchOpen(true)} style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}>
-              <Plus size={16} /> NEW MATCH
+              <Plus size={16} /> New Match
             </button>
           </div>
 
-      {/* Match Horizontal Selector Bar (Mirroring TeamView.tsx pattern) */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {matches.map(m => {
-          const isSelected = m.id === currentMatch.id;
-          const hasReview = Boolean(m.postMatchReview?.observations.length);
-          return (
-            <button
-              key={m.id}
-              onClick={() => handleSelectMatch(m.id)}
-              style={{
-                minWidth: '120px',
-                padding: '10px',
-                borderRadius: '10px',
-                border: isSelected ? '2px solid var(--accent-gold)' : '1px solid var(--border-light)',
-                background: isSelected ? 'var(--accent-gold-soft)' : 'var(--bg-surface-card)',
-                color: isSelected ? 'var(--accent-gold)' : 'var(--text-main)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                flexShrink: 0
-              }}
-            >
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>v {m.opponent}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{m.date.slice(5)}</span>
-                <span className={`badge ${hasReview ? 'badge-green' : 'badge-gold'}`} style={{ fontSize: '0.6rem' }}>
-                  {hasReview ? 'REVIEWED' : 'UPCOMING'}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Selected Match Card Info */}
-      <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>v {currentMatch.opponent} ({currentMatch.format})</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              📍 {currentMatch.venue} • 📅 {currentMatch.date}
+          {/* Primary Fixture Context Hero Card */}
+          <div className="home-primary-card" style={{ borderLeft: isCompleted ? '4px solid var(--accent-gold)' : isMatchDay ? '4px solid var(--status-live)' : '4px solid var(--primary-green-light)' }}>
+            <div className="home-primary-badge-row">
+              <span className={`badge ${isMatchDay ? 'badge-live' : isCompleted ? 'badge-gold' : 'badge-green'}`}>
+                {isMatchDay ? 'MATCH DAY' : isCompleted ? 'MATCH COMPLETE' : 'NEXT MATCH'}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{currentMatch.format}</span>
             </div>
-          </div>
-          <span className={`badge ${currentMatch.result ? 'badge-live' : 'badge-gold'}`}>
-            {currentMatch.result || 'Upcoming Fixture'}
-          </span>
-        </div>
-      </div>
 
-      <div className="match-section-tabs" role="tablist" aria-label="Match sections">
-        {([
-          ['overview', 'Overview'],
-          ['plan', 'Plan'],
-          ['review', `Review ${currentMatch.postMatchReview?.observations.length || 0}`]
-        ] as const).map(([section, label]) => (
-          <button
-            key={section}
-            role="tab"
-            aria-selected={activeSection === section}
-            onClick={() => setActiveSection(section)}
-            className={activeSection === section ? 'active' : ''}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {activeSection === 'overview' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div className="card">
-            <div className="card-title">
-              <span>Match preparation</span>
-              <button className="btn btn-secondary" onClick={() => setIsPrepWizardOpen(true)} style={{ width: 'auto', padding: '0 12px', height: '32px', fontSize: '0.75rem' }}>
-                Open match prep {workflowStatus.completedCount}/4 <ArrowRight size={14} />
-              </button>
-            </div>
-            <div className="match-progress-grid">
-              {([
-                ['Squad selected', workflowStatus.squad, 1],
-                ['Opponents entered', workflowStatus.opposition, 2],
-                ['Conditions confirmed', workflowStatus.conditions, 3],
-                ['Plans generated', workflowStatus.plans, 4]
-              ] as const).map(([label, complete, stage]) => (
-                <button key={label} className="match-progress-card" onClick={() => { setTacticalStage(stage); setIsPrepWizardOpen(true); }}>
-                  {complete ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-                  <span>{label}</span>
-                  <strong>{complete ? 'Complete' : 'Needs attention'}</strong>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-title">At a glance</div>
-            <div className="match-overview-grid">
-              <div><span>Fixture</span><strong>{currentMatch.date} · {currentMatch.venue}</strong></div>
-              <div><span>Format</span><strong>{currentMatch.format}</strong></div>
-              <div><span>Team objectives</span><strong>{currentMatch.preMatchPlan.teamObjectives.length}</strong></div>
-              <div><span>Review</span><strong>{isReviewed ? 'Started' : 'Not started'}</strong></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Post Match Review Tab */}
-      {activeSection === 'review' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Match Result Input Bar */}
-          <div className="card" style={{ padding: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH RESULT</span>
-              {isReviewed && (
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
-                  Reviewed on {currentMatch.postMatchReview?.reviewedDate}
-                </span>
+            <h2 className="home-primary-title">v {currentMatch.opponent}</h2>
+            <div className="home-primary-meta">
+              <span>{currentMatch.date}</span>
+              <span>·</span>
+              <span>{currentMatch.venue}</span>
+              {currentMatch.result && (
+                <>
+                  <span>·</span>
+                  <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>{currentMatch.result}</span>
+                </>
               )}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={matchResultText}
-                onChange={e => setMatchResultText(e.target.value)}
-                placeholder="e.g. Won by 14 runs / Lost by 3 wickets"
-                style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-light)',
-                  background: 'var(--bg-surface-elevated)',
-                  color: 'var(--text-main)',
-                  fontSize: '0.85rem'
-                }}
-              />
-              <button
-                onClick={() => saveUpdatedPriorities(derivedPriorities)}
-                className="btn btn-secondary"
-                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.75rem' }}
-              >
-                <Save size={14} /> SAVE
-              </button>
+
+            <div className="home-primary-actions">
+              {!isCompleted && !isMatchDay && (
+                <button className="btn btn-primary" onClick={() => setIsPrepWizardOpen(true)}>
+                  Prepare Match
+                </button>
+              )}
+              {isMatchDay && (
+                <button className="btn btn-live" onClick={() => setActiveSection('plan')}>
+                  Open Match Day Plan
+                </button>
+              )}
+              {isCompleted && (
+                <button className="btn btn-gold" onClick={() => setActiveSection('review')}>
+                  Review Match
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Key Observations List & Add Action */}
-          <div className="card">
-            <div className="card-title" style={{ fontSize: '0.95rem' }}>
-              <span>POST-MATCH COACH OBSERVATIONS ({currentMatch.postMatchReview?.observations.length || 0})</span>
-              <button
-                onClick={() => setIsAddObservationOpen(true)}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <Plus size={14} /> ADD OBSERVATION
-              </button>
-            </div>
+          {/* Compact Fixtures List Selector */}
+          {matches.length > 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', padding: '0 2px' }}>
+                FIXTURES
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {matches.map(m => {
+                  const isSel = m.id === currentMatch.id;
+                  const mDone = Boolean(m.result || (m.date < new Date().toISOString().split('T')[0]));
 
-            {/* Observations List */}
-            {currentMatch.postMatchReview?.observations && currentMatch.postMatchReview.observations.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-                {currentMatch.postMatchReview.observations.map(obs => (
-                  <div key={obs.id} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="badge badge-gold">{obs.area}</span>
-                      {obs.suggestedPriority && (
-                        <span style={{ color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700 }}>
-                          → Priority: {obs.suggestedPriority}
+                  return (
+                    <div
+                      key={m.id}
+                      className={`fixture-compact-row ${isSel ? 'selected' : ''}`}
+                      onClick={() => handleSelectMatch(m.id)}
+                    >
+                      <div className="fixture-compact-left">
+                        <div className="fixture-compact-opponent">v {m.opponent}</div>
+                        <div className="fixture-compact-meta">
+                          {m.format} · {m.date} {m.result ? `· ${m.result}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className={`badge ${mDone ? 'badge-gold' : 'badge-green'}`} style={{ fontSize: '0.65rem' }}>
+                          {mDone ? 'COMPLETED' : 'UPCOMING'}
                         </span>
-                      )}
+                        <ChevronRight size={16} color="var(--text-muted)" />
+                      </div>
                     </div>
-                    <div style={{ color: 'var(--text-main)', marginTop: '6px', lineHeight: 1.4 }}>
-                      {obs.observationText}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Match Workflow Tabs */}
+          <div className="train-tab-selector">
+            <button
+              className={`train-tab-btn ${activeSection === 'overview' ? 'active' : ''}`}
+              onClick={() => setActiveSection('overview')}
+            >
+              OVERVIEW
+            </button>
+            <button
+              className={`train-tab-btn ${activeSection === 'plan' ? 'active' : ''}`}
+              onClick={() => setActiveSection('plan')}
+            >
+              GAME PLAN
+            </button>
+            <button
+              className={`train-tab-btn ${activeSection === 'review' ? 'active' : ''}`}
+              onClick={() => setActiveSection('review')}
+            >
+              REVIEW {observationCount > 0 ? `(${observationCount})` : ''}
+            </button>
+          </div>
+
+          {/* TAB 1: OVERVIEW & MATCH PREP CHECKLIST */}
+          {activeSection === 'overview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="prep-checklist-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>MATCH PREP</h3>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {workflowStatus.completedCount} of 4 ready
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '12px 0' }}>
-                No post-match observations recorded yet for v {currentMatch.opponent}. Click "+ ADD OBSERVATION" to record match insights.
-              </div>
-            )}
-          </div>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setIsPrepWizardOpen(true)}
+                    style={{ width: 'auto', padding: '0 12px', height: '34px', fontSize: '0.75rem' }}
+                  >
+                    Continue Preparation <ArrowRight size={14} />
+                  </button>
+                </div>
 
-          {/* Add Observation Form Drawer / Modal */}
-          {isAddObservationOpen && (
-            <div className="card" style={{ border: '1px solid var(--border-gold)', background: 'var(--bg-surface-elevated)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>NEW MATCH OBSERVATION</span>
-                <button aria-label="Close observation form" onClick={() => setIsAddObservationOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                  <X size={16} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                  {[
+                    { label: 'Squad', complete: workflowStatus.squad, stage: 1 },
+                    { label: 'Opponent', complete: workflowStatus.opposition, stage: 2 },
+                    { label: 'Conditions', complete: workflowStatus.conditions, stage: 3 },
+                    { label: 'Game Plan', complete: workflowStatus.plans, stage: 4 }
+                  ].map(item => (
+                    <div
+                      key={item.label}
+                      className={`prep-checklist-item ${item.complete ? 'complete' : ''}`}
+                      onClick={() => {
+                        setTacticalStage(item.stage as any);
+                        setIsPrepWizardOpen(true);
+                      }}
+                    >
+                      <span>{item.complete ? '✓ ' : '○ '}{item.label}</span>
+                      <span style={{ fontSize: '0.75rem', color: item.complete ? '#4ade80' : 'var(--text-muted)' }}>
+                        {item.complete ? 'Complete' : 'Not started'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  FIXTURE AT A GLANCE
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.82rem' }}>
+                  <div><span style={{ color: 'var(--text-muted)' }}>Opponent:</span> <strong>{currentMatch.opponent}</strong></div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>Format:</span> <strong>{currentMatch.format}</strong></div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>Date:</span> <strong>{currentMatch.date}</strong></div>
+                  <div><span style={{ color: 'var(--text-muted)' }}>Venue:</span> <strong>{currentMatch.venue}</strong></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: GAME PLAN */}
+          {activeSection === 'plan' && (
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-surface-card)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>GAME PLAN</h3>
+                <button className="btn btn-secondary" onClick={() => setIsPrepWizardOpen(true)} style={{ width: 'auto', padding: '0 10px', height: '32px', fontSize: '0.75rem' }}>
+                  Edit Game Plan
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)' }}>OBSERVATION AREA</label>
-                  <select
-                    value={obsArea}
-                    onChange={e => setObsArea(e.target.value as MatchObservation['area'])}
-                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '2px', fontSize: '0.8rem' }}
-                  >
-                    <option value="Batting">Batting</option>
-                    <option value="Bowling">Bowling</option>
-                    <option value="Fielding">Fielding</option>
-                    <option value="Team / Tactical">Team / Tactical</option>
-                  </select>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    TEAM OBJECTIVES
+                  </div>
+                  {currentMatch.preMatchPlan.teamObjectives.length > 0 ? (
+                    <ul style={{ paddingLeft: '16px', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
+                        <li key={i}>{obj}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div style={{ color: 'var(--text-muted)' }}>No team objectives set yet.</div>
+                  )}
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)' }}>OBSERVATION NOTE</label>
-                  <textarea
-                    rows={2}
-                    value={obsText}
-                    onChange={e => setObsText(e.target.value)}
-                    placeholder="e.g. Conceded 42 runs in final 3 overs due to missed yorker length."
-                    style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '2px', fontSize: '0.8rem', resize: 'vertical' }}
-                  />
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    BATTING STRATEGY
+                  </div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.battingNotes || 'No specific batting strategy configured.'}
+                  </p>
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SUGGESTED SESSION PRIORITY (Optional)</label>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    BOWLING STRATEGY
+                  </div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.bowlingNotes || 'No specific bowling strategy configured.'}
+                  </p>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    FIELDING FOCUS
+                  </div>
+                  <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
+                    {currentMatch.preMatchPlan.fieldingFocus || 'No specific fielding focus configured.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: REVIEW & NEXT TRAINING PRIORITIES */}
+          {activeSection === 'review' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Match Result Input Bar */}
+              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  MATCH RESULT
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     type="text"
-                    value={obsSuggestedPriority}
-                    onChange={e => setObsSuggestedPriority(e.target.value)}
-                    placeholder="e.g. Death bowling & yorker execution"
-                    style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '2px', fontSize: '0.8rem' }}
+                    value={matchResultText}
+                    onChange={e => setMatchResultText(e.target.value)}
+                    placeholder="e.g. Won by 14 runs / Lost by 3 wickets"
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', background: 'var(--bg-surface-elevated)', color: '#fff', border: '1px solid var(--border-light)', fontSize: '0.85rem' }}
                   />
+                  <button onClick={() => saveUpdatedPriorities(trainingPriorities)} className="btn btn-secondary" style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.75rem' }}>
+                    <Save size={14} /> Save
+                  </button>
+                </div>
+              </div>
+
+              {/* Match Observations List */}
+              <section className="home-section">
+                <div className="home-section-header">
+                  <span>POST-MATCH OBSERVATIONS ({observationCount})</span>
+                  <button
+                    onClick={() => setIsAddObservationOpen(true)}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Plus size={14} /> Add Note
+                  </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                  <button className="btn btn-secondary" onClick={() => setIsAddObservationOpen(false)} style={{ flex: 1, height: '36px', fontSize: '0.75rem' }}>
-                    CANCEL
+                {currentMatch.postMatchReview?.observations && currentMatch.postMatchReview.observations.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {currentMatch.postMatchReview.observations.map(obs => (
+                      <div key={obs.id} className="match-note-item">
+                        <div className="match-note-header">
+                          <span>{obs.area}</span>
+                          {obs.suggestedPriority && <span>Next: {obs.suggestedPriority}</span>}
+                        </div>
+                        <div className="match-note-body">{obs.observationText}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="card" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                    No match observations recorded yet. Click "+ Add Note" to log key moments.
+                  </div>
+                )}
+              </section>
+
+              {/* Next Training Priorities */}
+              <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)', background: 'linear-gradient(135deg, #1d2822 0%, #141c18 100%)', padding: '16px' }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <Sparkles size={16} /> NEXT TRAINING PRIORITIES
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Priorities identified from this match to focus on at next training session:
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {trainingPriorities.map((priority, i) => (
+                    <div key={i} style={{ background: 'var(--bg-surface-card)', border: '1px solid var(--border-gold)', padding: '10px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                        <CheckCircle2 size={16} color="var(--accent-gold)" />
+                        <span style={{ fontWeight: 700 }}>{priority}</span>
+                      </div>
+                      <button
+                        aria-label={`Remove priority ${priority}`}
+                        onClick={() => handleRemovePriority(i)}
+                        style={{ background: 'none', border: 'none', color: '#f97316', cursor: 'pointer', padding: '2px' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+                  <input
+                    type="text"
+                    value={newPriorityInput}
+                    onChange={e => setNewPriorityInput(e.target.value)}
+                    placeholder="Add practice priority..."
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddPriority();
+                      }
+                    }}
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', fontSize: '0.8rem' }}
+                  />
+                  <button onClick={handleAddPriority} className="btn btn-secondary" style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}>
+                    <Plus size={14} /> Add
                   </button>
-                  <button className="btn btn-gold" onClick={handleAddObservation} style={{ flex: 1, height: '36px', fontSize: '0.75rem' }}>
-                    <Check size={14} /> SAVE OBSERVATION
+                </div>
+
+                <button
+                  className="btn btn-gold"
+                  onClick={handleApplyPriorities}
+                  disabled={trainingPriorities.length === 0}
+                  style={{ marginTop: '14px', opacity: trainingPriorities.length === 0 ? 0.5 : 1 }}
+                >
+                  Take to Training Plan <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Add Observation Bottom Sheet */}
+          {isAddObservationOpen && (
+            <div className="bottom-sheet-overlay" onClick={() => setIsAddObservationOpen(false)}>
+              <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>ADD MATCH NOTE</h3>
+                  <button onClick={() => setIsAddObservationOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>AREA</label>
+                    <select
+                      value={obsArea}
+                      onChange={e => setObsArea(e.target.value as MatchObservation['area'])}
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px' }}
+                    >
+                      <option value="Batting">Batting</option>
+                      <option value="Bowling">Bowling</option>
+                      <option value="Fielding">Fielding</option>
+                      <option value="Team / Tactical">Tactics</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>WHAT HAPPENED?</label>
+                    <textarea
+                      rows={2}
+                      value={obsText}
+                      onChange={e => setObsText(e.target.value)}
+                      placeholder="e.g. Conceded 42 runs in final 3 overs due to missed yorker length."
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px', resize: 'vertical' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>NEXT TRAINING PRIORITY (Optional)</label>
+                    <input
+                      type="text"
+                      value={obsSuggestedPriority}
+                      onChange={e => setObsSuggestedPriority(e.target.value)}
+                      placeholder="e.g. Death bowling & yorker execution"
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px' }}
+                    />
+                  </div>
+
+                  <button className="btn btn-gold" onClick={handleAddObservation} style={{ marginTop: '6px' }}>
+                    <Check size={16} /> Save Match Note
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Derived Training Priorities & Session Handoff (Blueprint §13.4) */}
-          <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)', background: 'linear-gradient(135deg, #1d2822 0%, #141c18 100%)' }}>
-            <div className="card-title" style={{ color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Sparkles size={18} /> DERIVED NEXT TRAINING PRIORITIES
-            </div>
-            <div className="card-subtitle">
-              Coach can accept, add, remove, or edit training priorities before applying to session:
-            </div>
-
-            {/* Priorities List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
-              {derivedPriorities.map((priority, i) => (
-                <div key={i} style={{ background: 'var(--bg-surface-card)', border: '1px solid var(--border-gold)', padding: '10px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                    <CheckCircle2 size={16} color="var(--accent-gold)" />
-                    <span style={{ fontWeight: 700 }}>{priority}</span>
+          {/* Match Prep Wizard Modal */}
+          {isPrepWizardOpen && (
+            <div className="bottom-sheet-overlay" onClick={() => setIsPrepWizardOpen(false)}>
+              <div role="dialog" aria-modal="true" aria-labelledby="match-prep-wizard-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH PREPARATION</div>
+                    <h2 id="match-prep-wizard-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>v {currentMatch.opponent} — {workflowStatus.completedCount}/4 ready</h2>
                   </div>
-                  <button
-                    aria-label={`Remove priority ${priority}`}
-                    onClick={() => handleRemovePriority(i)}
-                    style={{ background: 'none', border: 'none', color: '#f97316', cursor: 'pointer', padding: '2px' }}
-                  >
-                    <Trash2 size={14} />
+                  <button aria-label="Close match prep" onClick={() => setIsPrepWizardOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                    <X size={20} />
                   </button>
                 </div>
-              ))}
-            </div>
 
-            {/* Add Custom Priority Input */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
-              <input
-                type="text"
-                value={newPriorityInput}
-                onChange={e => setNewPriorityInput(e.target.value)}
-                placeholder="Add custom practice priority..."
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddPriority();
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-light)',
-                  background: 'var(--bg-surface-card)',
-                  color: '#fff',
-                  fontSize: '0.8rem'
-                }}
-              />
-              <button
-                onClick={handleAddPriority}
-                className="btn btn-secondary"
-                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
-              >
-                <Plus size={14} /> ADD
-              </button>
-            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px', marginBottom: '16px' }}>
+                  {[
+                    { stage: 1, label: '1. Squad', icon: Users },
+                    { stage: 2, label: '2. Opponent', icon: User },
+                    { stage: 3, label: '3. Conditions', icon: Shield },
+                    { stage: 4, label: '4. Game Plan', icon: Target },
+                  ].map(({ stage, label, icon: Icon }) => {
+                    const isActive = tacticalStage === stage;
+                    const complete = [workflowStatus.squad, workflowStatus.opposition, workflowStatus.conditions, workflowStatus.plans][stage - 1];
+                    return (
+                      <button
+                        key={stage}
+                        onClick={() => setTacticalStage(stage as 1 | 2 | 3 | 4)}
+                        style={{
+                          padding: '8px 4px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: isActive ? 'var(--primary-green)' : 'transparent',
+                          color: isActive ? '#fff' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '2px',
+                          textAlign: 'center'
+                        }}
+                      >
+                        <Icon size={14} />
+                        <span>{complete ? '✓ ' : ''}{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-            <button
-              className="btn btn-gold"
-              onClick={handleApplyPriorities}
-              disabled={derivedPriorities.length === 0}
-              style={{ marginTop: '16px', opacity: derivedPriorities.length === 0 ? 0.5 : 1 }}
-            >
-              APPLY TO THURSDAY SESSION PLAN <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Pre-Match Plan section */}
-      {activeSection === 'plan' && (
-        <div className="card">
-          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>PRE-MATCH STRATEGY PLAN</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--accent-gold)' }}>v {currentMatch.opponent}</span>
-          </div>
-          <div style={{ marginTop: '12px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Team Objectives</div>
-              <ul style={{ paddingLeft: '16px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {currentMatch.preMatchPlan.teamObjectives.map((obj, i) => (
-                  <li key={i}>{obj}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Batting Strategy</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.battingNotes}
-              </p>
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Bowling Strategy</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.bowlingNotes}
-              </p>
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>Fielding Focus</div>
-              <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '6px', lineHeight: 1.4 }}>
-                {currentMatch.preMatchPlan.fieldingFocus}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Match Prep Wizard — its own overlay, not a tab nested inside the section tabs */}
-      {isPrepWizardOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setIsPrepWizardOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="match-prep-wizard-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH PREPARATION</div>
-                <h2 id="match-prep-wizard-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>v {currentMatch.opponent} — {workflowStatus.completedCount}/4 stages complete</h2>
-              </div>
-              <button aria-label="Close match prep" onClick={() => setIsPrepWizardOpen(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '4px', borderRadius: '10px', marginBottom: '16px' }}>
-              {[
-                { stage: 1, label: '1. Selected XI', icon: Users },
-                { stage: 2, label: '2. Opposition', icon: User },
-                { stage: 3, label: '3. Conditions', icon: Shield },
-                { stage: 4, label: '4. Bowling Plans', icon: Target },
-              ].map(({ stage, label, icon: Icon }) => {
-                const isActive = tacticalStage === stage;
-                const complete = [workflowStatus.squad, workflowStatus.opposition, workflowStatus.conditions, workflowStatus.plans][stage - 1];
-                return (
-                  <button
-                    key={stage}
-                    onClick={() => setTacticalStage(stage as 1 | 2 | 3 | 4)}
-                    style={{
-                      padding: '8px 4px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: isActive ? 'var(--primary-green)' : 'transparent',
-                      color: isActive ? '#fff' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: '0.72rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px',
-                      textAlign: 'center'
+                {tacticalStage === 1 && (
+                  <MatchSquadSelector
+                    matchId={matchId}
+                    players={players}
+                    savedSquad={matchSquad}
+                    onSaveSquad={squadData => {
+                      StorageEngine.saveMatchSquad(squadData);
+                      setMatchSquad(squadData);
+                      setTacticalStage(2);
                     }}
-                  >
-                    <Icon size={14} />
-                    <span>{complete ? '✓ ' : ''}{label}</span>
-                  </button>
-                );
-              })}
+                  />
+                )}
+
+                {tacticalStage === 2 && (
+                  <OppositionBatterManager
+                    matchId={matchId}
+                    batters={oppositionBatters}
+                    onSaveBatter={batterData => {
+                      StorageEngine.saveOppositionBatter(batterData);
+                      setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                    }}
+                    onDeleteBatter={id => {
+                      StorageEngine.deleteOppositionBatter(id);
+                      setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                    }}
+                  />
+                )}
+
+                {tacticalStage === 3 && (
+                  <RulesProfileSelector
+                    profiles={rulesProfiles}
+                    selectedProfileId={selectedRulesProfileId}
+                    onSelectProfileId={setSelectedRulesProfileId}
+                    context={tacticalContext}
+                    onUpdateContext={setTacticalContext}
+                  />
+                )}
+
+                {tacticalStage === 4 && (
+                  <BowlingPlanGenerator
+                    matchId={matchId}
+                    selectedXI={players.filter(p => matchSquad?.selectedPlayerIds.includes(p.id) || matchSquad === undefined)}
+                    batters={oppositionBatters}
+                    context={tacticalContext}
+                    savedPlans={savedTacticalPlans}
+                    onSavePlan={planData => {
+                      StorageEngine.saveTacticalPlan(planData);
+                      setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                    }}
+                    onOpenFieldBoard={(bowler, plan, positions) => {
+                      setFieldBoardModalData({
+                        isOpen: true,
+                        bowler,
+                        plan,
+                        positions,
+                      });
+                    }}
+                  />
+                )}
+              </div>
             </div>
+          )}
 
-            {tacticalStage === 1 && (
-              <MatchSquadSelector
-                matchId={matchId}
-                players={players}
-                savedSquad={matchSquad}
-                onSaveSquad={squadData => {
-                  StorageEngine.saveMatchSquad(squadData);
-                  setMatchSquad(squadData);
-                  setTacticalStage(2);
-                }}
+          {/* Interactive Field Board Modal Triggered from BowlerPlanCard */}
+          {fieldBoardModalData.isOpen && fieldBoardModalData.bowler && fieldBoardModalData.plan && (
+            <FieldBoardModal
+              onClose={() => setFieldBoardModalData({ isOpen: false })}
+              initialBatterHand={tacticalContext.batterHand}
+              initialPresetId={fieldBoardModalData.plan.fieldPresetId}
+              initialPositions={fieldBoardModalData.positions}
+              bowlerName={fieldBoardModalData.bowler.name}
+              planTitle={fieldBoardModalData.plan.title}
+              maxOutsideCircle={tacticalContext.maxFieldersOutsideCircle}
+              onSaveField={updatedPositions => {
+                const activeBatterId = oppositionBatters[0]?.id || 'bat-1';
+                const planToSave: SavedTacticalPlan = {
+                  id: `plan-${Date.now()}-${fieldBoardModalData.bowler?.id}`,
+                  matchId,
+                  batterId: activeBatterId,
+                  bowlerId: fieldBoardModalData.bowler!.id,
+                  planId: fieldBoardModalData.plan!.id,
+                  fieldPresetId: fieldBoardModalData.plan!.fieldPresetId,
+                  positions: updatedPositions,
+                  status: 'edited',
+                  updatedAt: new Date().toISOString(),
+                  warnings: [],
+                };
+                StorageEngine.saveTacticalPlan(planToSave);
+                setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                setFieldBoardModalData({ isOpen: false });
+              }}
+            />
+          )}
+
+          {/* Match Creation Modal */}
+          {isAddMatchOpen && (
+            <Suspense fallback={null}>
+              <MatchCreationModal
+                onClose={() => setIsAddMatchOpen(false)}
+                onSaveMatch={handleCreateMatch}
               />
-            )}
-
-            {tacticalStage === 2 && (
-              <OppositionBatterManager
-                matchId={matchId}
-                batters={oppositionBatters}
-                onSaveBatter={batterData => {
-                  StorageEngine.saveOppositionBatter(batterData);
-                  setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
-                }}
-                onDeleteBatter={id => {
-                  StorageEngine.deleteOppositionBatter(id);
-                  setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
-                }}
-              />
-            )}
-
-            {tacticalStage === 3 && (
-              <RulesProfileSelector
-                profiles={rulesProfiles}
-                selectedProfileId={selectedRulesProfileId}
-                onSelectProfileId={setSelectedRulesProfileId}
-                context={tacticalContext}
-                onUpdateContext={setTacticalContext}
-              />
-            )}
-
-            {tacticalStage === 4 && (
-              <BowlingPlanGenerator
-                matchId={matchId}
-                selectedXI={players.filter(p => matchSquad?.selectedPlayerIds.includes(p.id) || matchSquad === undefined)}
-                batters={oppositionBatters}
-                context={tacticalContext}
-                savedPlans={savedTacticalPlans}
-                onSavePlan={planData => {
-                  StorageEngine.saveTacticalPlan(planData);
-                  setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
-                }}
-                onOpenFieldBoard={(bowler, plan, positions) => {
-                  setFieldBoardModalData({
-                    isOpen: true,
-                    bowler,
-                    plan,
-                    positions,
-                  });
-                }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Interactive Field Board Modal Triggered from BowlerPlanCard */}
-      {fieldBoardModalData.isOpen && fieldBoardModalData.bowler && fieldBoardModalData.plan && (
-        <FieldBoardModal
-          onClose={() => setFieldBoardModalData({ isOpen: false })}
-          initialBatterHand={tacticalContext.batterHand}
-          initialPresetId={fieldBoardModalData.plan.fieldPresetId}
-          initialPositions={fieldBoardModalData.positions}
-          bowlerName={fieldBoardModalData.bowler.name}
-          planTitle={fieldBoardModalData.plan.title}
-          maxOutsideCircle={tacticalContext.maxFieldersOutsideCircle}
-          onSaveField={updatedPositions => {
-            const activeBatterId = oppositionBatters[0]?.id || 'bat-1';
-            const planToSave: SavedTacticalPlan = {
-              id: `plan-${Date.now()}-${fieldBoardModalData.bowler?.id}`,
-              matchId,
-              batterId: activeBatterId,
-              bowlerId: fieldBoardModalData.bowler!.id,
-              planId: fieldBoardModalData.plan!.id,
-              fieldPresetId: fieldBoardModalData.plan!.fieldPresetId,
-              positions: updatedPositions,
-              status: 'edited',
-              updatedAt: new Date().toISOString(),
-              warnings: [],
-            };
-            StorageEngine.saveTacticalPlan(planToSave);
-            setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
-            setFieldBoardModalData({ isOpen: false });
-          }}
-        />
-      )}
-
-      {/* Match Creation Modal */}
-      {isAddMatchOpen && (
-        <Suspense fallback={null}>
-          <MatchCreationModal
-            onClose={() => setIsAddMatchOpen(false)}
-            onSaveMatch={handleCreateMatch}
-          />
-        </Suspense>
-      )}
-
+            </Suspense>
+          )}
         </>
       )}
     </div>

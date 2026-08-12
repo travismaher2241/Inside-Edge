@@ -378,13 +378,17 @@ export function App() {
         <HomeView
           session={currentClubSession}
           match={activeMatch}
+          matches={matches}
+          sessions={clubSessions}
           players={players}
           focuses={focuses}
           resources={trainingResources}
+          team={team}
           onStartLiveSession={() => { if (currentClubSession) setIsLiveMode(true); }}
           onNavigateToTrain={() => setActiveTab('train')}
           onNavigateToMatch={() => setActiveTab('match')}
           onNavigateToTeam={() => setActiveTab('team')}
+          onNavigateToLibrary={() => setActiveTab('library')}
         />
       )}
 

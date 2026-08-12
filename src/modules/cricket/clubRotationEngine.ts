@@ -133,8 +133,15 @@ export function calculateSessionFeasibility(options: {
     };
   }
 
+  // Calculate staffable capacity for feasibility check
+  let staffableCapacityMinutes = 0;
+  availableResources.filter(r => r.active).forEach(res => {
+    const maxBatters = res.maxBatters || (res.type.includes('net') ? 2 : 2);
+    staffableCapacityMinutes += maxBatters * sessionDurationMinutes;
+  });
+
   const fairBattingMinutesPerPlayer = Math.round(
-    (totalNetBattingCapacityMinutes / totalBattingTurnsNeeded) * 10
+    (staffableCapacityMinutes / totalBattingTurnsNeeded) * 10
   ) / 10;
 
   const warnings: string[] = [];
@@ -145,7 +152,7 @@ export function calculateSessionFeasibility(options: {
   if (fairBattingMinutesPerPlayer < 8) {
     isFeasible = false;
     warnings.push(
-      `Capacity alert: ${totalBattingTurnsNeeded} players require batting turns. ${availableResources.filter(r => r.active).length} resources provide ${totalNetBattingCapacityMinutes} usable batting minutes. Equal allocation would be approx ${fairBattingMinutesPerPlayer} mins each.`
+      `Capacity alert: ${totalBattingTurnsNeeded} players require batting turns. ${availableResources.filter(r => r.active).length} active areas provide ${staffableCapacityMinutes} staffable batting minutes. Equal allocation would be approx ${fairBattingMinutesPerPlayer} mins each.`
     );
     recommendedAdjustments.push('Extend session duration or shorten block rotation lengths.');
     recommendedAdjustments.push('Move selected players into a centre-wicket scenario or fielding station.');
@@ -153,7 +160,7 @@ export function calculateSessionFeasibility(options: {
     recommendedAdjustments.push('Designate specific specialist bowlers/keepers as bowling-focused for this session.');
   }
 
-  const feasibilityMessage = `${totalBattingTurnsNeeded} players require batting opportunities. Configured active resources provide ${totalNetBattingCapacityMinutes} usable batting minutes. Fully equal allocation is approx ${fairBattingMinutesPerPlayer} mins per player.`;
+  const feasibilityMessage = `${totalBattingTurnsNeeded} players require batting opportunities. Active staffable resources provide ${staffableCapacityMinutes} usable batting minutes. Fully equal allocation is approx ${fairBattingMinutesPerPlayer} mins per player.`;
 
   return {
     totalNetBattingCapacityMinutes,

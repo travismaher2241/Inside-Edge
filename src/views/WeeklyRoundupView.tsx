@@ -9,9 +9,7 @@ import {
   getLatestReport
 } from '../modules/cricket/roundupAggregation';
 import { ClubTeamManager } from '../components/cricket/ClubTeamManager';
-import { isFirebaseConfigured } from '../lib/firebase';
-import { FirebaseNotConfiguredBanner } from '../components/cricket/FirebaseNotConfiguredBanner';
-import { Calendar, Filter, Zap, CheckSquare, Square, FileText, AlertCircle, RefreshCw, Clock, Users } from 'lucide-react';
+import { Calendar, Filter, CheckSquare, Square, FileText, RefreshCw, Users, ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
 
 interface WeeklyRoundupViewProps {
   onApplyPrioritiesToSession: (priorities: string[]) => void;
@@ -22,9 +20,9 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const [allReports, setAllReports] = useState<MatchReport[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [daysLimit, setDaysLimit] = useState<number>(7);
-  const [missingReportsOnly, setMissingReportsOnly] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string>('');
   const [isTeamManagerOpen, setIsTeamManagerOpen] = useState<boolean>(false);
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
 
   // Selected recurring issues to apply to session
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
@@ -64,7 +62,6 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
     return getTopRecurringIssues(tagFrequencies, 5);
   }, [tagFrequencies]);
 
-  // Update selectedPriorities whenever topRecurringIssues changes initially
   useEffect(() => {
     if (topRecurringIssues.length > 0) {
       setSelectedPriorities(topRecurringIssues);
@@ -77,10 +74,6 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const teamGroups = useMemo(() => {
     return groupReportsByTeam(teams, reportsInRange);
   }, [teams, reportsInRange]);
-  const visibleTeamGroups = useMemo(
-    () => missingReportsOnly ? teamGroups.filter(group => group.reports.length === 0) : teamGroups,
-    [missingReportsOnly, teamGroups]
-  );
 
   const handleTogglePriority = (issue: string) => {
     setSelectedPriorities(current => current.includes(issue) ? current.filter(priority => priority !== issue) : [...current, issue]);
@@ -89,28 +82,26 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
   const handleApplyToSession = () => {
     if (selectedPriorities.length === 0) return;
     onApplyPrioritiesToSession(selectedPriorities);
-    setFeedback(`${selectedPriorities.length} priorities applied to the current session.`);
+    setFeedback(`${selectedPriorities.length} priorities added to training plan.`);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {!isFirebaseConfigured && <FirebaseNotConfiguredBanner />}
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Header & Date Range Filter */}
-      <div className="card" style={{ padding: '16px 20px' }}>
+      <div className="card" style={{ padding: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Calendar style={{ width: '24px', height: '24px', color: 'var(--accent-gold)' }} />
-              Weekly Post-Match Round-Up
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar style={{ width: '20px', height: '20px', color: 'var(--accent-gold)' }} />
+              WEEKLY CLUB ROUND-UP
             </h1>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Collated captain reports across all club teams & recurring training priorities.
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Common themes from match reports across the club.
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Filter style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }} />
+            <Filter style={{ width: '14px', height: '14px', color: 'var(--text-muted)' }} />
             <select
               aria-label="Report date range"
               value={daysLimit}
@@ -120,21 +111,21 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                 border: '1px solid var(--border-light)',
                 borderRadius: 'var(--radius-sm)',
                 color: 'var(--text-main)',
-                padding: '6px 12px',
-                fontSize: '0.85rem',
-                fontWeight: 600
+                padding: '6px 10px',
+                fontSize: '0.8rem',
+                fontWeight: 700
               }}
             >
-              <option value={7}>Most Recent 7 Days</option>
-              <option value={14}>Last 14 Days</option>
-              <option value={30}>Last 30 Days</option>
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
             </select>
             <button
               type="button"
               onClick={loadData}
               className="btn btn-secondary"
               aria-label="Refresh reports"
-              style={{ width: 'auto', minHeight: '34px', padding: '0 10px' }}
+              style={{ width: 'auto', minHeight: '34px', padding: '0 8px' }}
             >
               <RefreshCw style={{ width: '14px', height: '14px' }} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -142,22 +133,26 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
         </div>
       </div>
 
-      {feedback && <div className="card" role="status" style={{ padding: '10px 14px', color: '#4ade80' }}>{feedback}</div>}
+      {feedback && (
+        <div className="card" role="status" style={{ padding: '10px 14px', color: '#4ade80', fontSize: '0.85rem', fontWeight: 700 }}>
+          ✓ {feedback}
+        </div>
+      )}
 
-      {/* Top Recurring Issues & Session Priority Generator */}
+      {/* Top Recurring Issues */}
       <div className="card" style={{
         border: '1px solid var(--border-gold)',
         background: 'linear-gradient(135deg, rgba(229, 169, 60, 0.08) 0%, rgba(20, 28, 24, 0.9) 100%)',
-        padding: '20px'
+        padding: '16px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-gold)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Zap style={{ width: '20px', height: '20px', color: 'var(--accent-gold)' }} />
-              Top Recurring Club Issues ({daysLimit} Days)
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Sparkles style={{ width: '18px', height: '18px', color: 'var(--accent-gold)' }} />
+              TOP RECURRING ISSUES
             </h2>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              Drawn deterministically from captain reports. Select priorities for next session objectives.
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Select key issues to take into training.
             </p>
           </div>
 
@@ -166,18 +161,18 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
             className="btn btn-gold"
             disabled={selectedPriorities.length === 0}
             onClick={handleApplyToSession}
-            style={{ width: 'auto', minHeight: '40px', padding: '0 16px', fontSize: '0.85rem' }}
+            style={{ width: 'auto', minHeight: '36px', padding: '0 12px', fontSize: '0.8rem' }}
           >
-            Apply ({selectedPriorities.length}) to Thursday Session Plan
+            Add Priorities to Training ({selectedPriorities.length})
           </button>
         </div>
 
         {topRecurringIssues.length === 0 ? (
-          <div style={{ padding: '16px', fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
-            No tagged issues found in the selected date range ({daysLimit} days).
+          <div style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '0.82rem', textAlign: 'center' }}>
+            No recurring themes yet. As more match reviews are completed, common coaching priorities will appear here.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
             {tagFrequencies.slice(0, 5).map(tf => {
               const selected = selectedPriorities.includes(tf.tag);
               return (
@@ -185,32 +180,20 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
                   type="button"
                   key={tf.tag}
                   onClick={() => handleTogglePriority(tf.tag)}
-                  aria-pressed={selected}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '10px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: selected ? 'var(--accent-gold-soft)' : 'var(--bg-surface)',
-                    border: selected ? '1px solid var(--border-gold)' : '1px solid var(--border-light)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
+                  className={`roundup-issue-btn ${selected ? 'selected' : ''}`}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {selected ? (
-                      <CheckSquare style={{ width: '18px', height: '18px', color: 'var(--accent-gold)' }} />
+                      <CheckSquare style={{ width: '16px', height: '16px', color: 'var(--accent-gold)' }} />
                     ) : (
-                      <Square style={{ width: '18px', height: '18px', color: 'var(--text-muted)' }} />
+                      <Square style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }} />
                     )}
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)' }}>
                       {tf.tag}
                     </span>
                   </div>
                   <span className="badge badge-gold" style={{ fontSize: '0.7rem' }}>
-                    {tf.count} {tf.count === 1 ? 'Report' : 'Reports'}
+                    Reported by {tf.count} {tf.count === 1 ? 'team' : 'teams'}
                   </span>
                 </button>
               );
@@ -219,140 +202,102 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
         )}
       </div>
 
-      {/* Reports List Grouped by Team */}
-      <div className="card" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
-          <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FileText style={{ width: '20px', height: '20px', color: 'var(--primary-green-light)' }} />
+      {/* Reports Grouped by Team as Compact Expandable Rows */}
+      <div className="card" style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FileText style={{ width: '18px', height: '18px', color: 'var(--primary-green-light)' }} />
             Reports by team
           </h2>
-          <button type="button" className="btn btn-secondary" aria-pressed={missingReportsOnly} onClick={() => setMissingReportsOnly(value => !value)} style={{ width: 'auto', minHeight: '38px', padding: '0 12px' }}>
-            {missingReportsOnly ? 'Show all teams' : `Missing reports (${teamGroups.filter(group => group.reports.length === 0).length})`}
-          </button>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{teamGroups.length} teams</span>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
-            Loading match reports...
+          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            Loading club themes...
           </div>
         ) : teamGroups.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
             No club teams defined. Please add club teams below.
           </div>
-        ) : visibleTeamGroups.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>Every team has submitted a report in this date range.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {visibleTeamGroups.map(({ team, reports }) => {
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {teamGroups.map(({ team, reports }) => {
+              const isExpanded = expandedTeamId === team.id;
               const latestReport = getLatestReport(reports);
+
               return (
-              <div
-                key={team.id}
-                style={{
-                  background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '16px',
-                  border: '1px solid var(--border-light)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>{team.name}</h3>
-                    <span className="badge badge-green" style={{ fontSize: '0.68rem' }}>{team.ageGroup}</span>
-                  </div>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    {latestReport ? <><Clock size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />Last submitted {new Date(latestReport.createdAt).toLocaleString()}</> : 'Awaiting report'}
-                  </span>
-                </div>
-
-                {reports.length === 0 ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '12px',
-                    backgroundColor: 'var(--bg-surface-elevated)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-muted)',
-                    fontSize: '0.85rem'
-                  }}>
-                    <AlertCircle style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }} />
-                    No report submitted this week.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {reports.map(rep => (
-                      <div
-                        key={rep.id}
-                        style={{
-                          backgroundColor: 'var(--bg-surface-card)',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '12px 14px',
-                          border: '1px solid var(--border-light)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-gold)' }}>
-                            Submitted by Captain {rep.submittedBy}
-                          </span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            {rep.opponent ? `vs ${rep.opponent} • ` : ''}{new Date(rep.matchDate || rep.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        {rep.taggedIssues && rep.taggedIssues.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                            {rep.taggedIssues.map((tag, idx) => (
-                              <span
-                                key={idx}
-                                style={{
-                                  padding: '3px 8px',
-                                  borderRadius: 'var(--radius-pill)',
-                                  backgroundColor: 'rgba(27, 77, 62, 0.4)',
-                                  color: '#4ade80',
-                                  border: '1px solid rgba(74, 222, 128, 0.3)',
-                                  fontSize: '0.73rem',
-                                  fontWeight: 600
-                                }}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {rep.freeTextNotes && (
-                          <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: 1.4, fontStyle: 'italic', background: 'var(--bg-surface-elevated)', padding: '8px 10px', borderRadius: 'var(--radius-sm)' }}>
-                            "{rep.freeTextNotes}"
-                          </p>
-                        )}
+                <div key={team.id} className="card" style={{ padding: '12px', background: 'var(--bg-surface-card)', marginBottom: 0 }}>
+                  <div 
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                    onClick={() => setExpandedTeamId(isExpanded ? null : team.id)}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>{team.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {reports.length} match note{reports.length === 1 ? '' : 's'} · {latestReport ? `Last submitted ${new Date(latestReport.createdAt).toLocaleDateString()}` : 'No report'}
                       </div>
-                    ))}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className={`badge ${reports.length > 0 ? 'badge-green' : 'badge-warning'}`}>
+                        {reports.length > 0 ? 'SUBMITTED' : 'AWAITING'}
+                      </span>
+                      {isExpanded ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {isExpanded && (
+                    <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {reports.length === 0 ? (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          No match reports submitted for {team.name} in this period.
+                        </div>
+                      ) : (
+                        reports.map(rep => (
+                          <div key={rep.id} style={{ background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', fontSize: '0.8rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-gold)', fontWeight: 700, fontSize: '0.75rem', marginBottom: '4px' }}>
+                              <span>Captain {rep.submittedBy}</span>
+                              <span>{rep.opponent ? `vs ${rep.opponent}` : ''}</span>
+                            </div>
+                            {rep.taggedIssues && rep.taggedIssues.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                                {rep.taggedIssues.map((tag, idx) => (
+                                  <span key={idx} className="badge badge-green" style={{ fontSize: '0.65rem' }}>{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                            {rep.freeTextNotes && (
+                              <div style={{ color: 'var(--text-main)', fontStyle: 'italic' }}>"{rep.freeTextNotes}"</div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
         )}
       </div>
 
-      {/* Club Teams Management Entry Point */}
-      <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+      {/* Club Teams & Captain Links Entry */}
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Users style={{ width: '18px', height: '18px', color: 'var(--accent-gold)' }} />
+          <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Users style={{ width: '16px', height: '16px', color: 'var(--accent-gold)' }} />
             Club Teams & Captain Links
-          </h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Manage club teams and share public submission links with captains.
-          </p>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            Manage team submission links for captains.
+          </div>
         </div>
         <button
           type="button"
           className="btn btn-secondary"
           onClick={() => setIsTeamManagerOpen(true)}
-          style={{ width: 'auto', minHeight: '38px', padding: '0 14px', fontSize: '0.85rem' }}
+          style={{ width: 'auto', minHeight: '36px', padding: '0 12px', fontSize: '0.8rem' }}
         >
           Manage teams ({teams.length})
         </button>
@@ -363,14 +308,14 @@ export const WeeklyRoundupView: React.FC<WeeklyRoundupViewProps> = ({ onApplyPri
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Club teams and captain links management"
+            aria-label="Club teams management"
             className="bottom-sheet-content"
             onClick={e => e.stopPropagation()}
             style={{ maxWidth: '720px', maxHeight: '92vh', overflowY: 'auto' }}
           >
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-              <button aria-label="Close club team manager" onClick={() => setIsTeamManagerOpen(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '0 10px', height: '32px' }}>
-                ✕
+              <button onClick={() => setIsTeamManagerOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                <X size={20} />
               </button>
             </div>
             <ClubTeamManager reports={allReports} />

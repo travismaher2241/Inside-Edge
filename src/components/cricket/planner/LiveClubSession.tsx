@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { ClubTrainingSession, Player, ClubTeam, TrainingResource } from '../../../types/cricket';
-import { handleLiveNoShow, handleLiveLateArrival, handleLiveInjury, handleManualSwap, recalculateFutureRotations } from '../../../modules/cricket/clubRotationEngine';
-import { ResourceLeaderView } from './ResourceLeaderView';
-import { Play, Pause, SkipForward, ArrowLeft, RefreshCw, Undo2, Settings2, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { handleLiveNoShow, handleLiveLateArrival, handleLiveInjury, handleManualSwap } from '../../../modules/cricket/clubRotationEngine';
+import { Play, Pause, SkipForward, ArrowLeft, Undo2, Settings2, Volume2, VolumeX, ChevronDown, ChevronUp, X } from 'lucide-react';
 
 type LiveChangeType = 'absent' | 'late' | 'injury' | 'swap';
 
@@ -24,8 +23,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   resources,
   onUpdateSession,
   onExitLive,
-  onCompleteSession,
-  onOpenQuickObservation
+  onCompleteSession
 }) => {
   const [activeBlockIdx, setActiveBlockIdx] = useState<number>(session.currentLiveState?.activeRotationIndex ?? session.activeRotationIndex ?? 0);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(
@@ -33,41 +31,28 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
       ?? (session.rotationPlan[session.activeRotationIndex ?? 0]?.durationMinutes || session.rotationDurationMinutes || 12) * 60
   );
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(!session.currentLiveState?.isPaused);
-  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
-  const [isLeaderViewActive, setIsLeaderViewActive] = useState<boolean>(false);
+  const [expandedAreaId, setExpandedAreaId] = useState<string | null>(null);
+  const [showNextPreview, setShowNextPreview] = useState<boolean>(false);
 
+  // Live Change Modal
   const [showChangeModal, setShowChangeModal] = useState<boolean>(false);
   const [changeType, setChangeType] = useState<LiveChangeType>('absent');
-
   const [selectedPlayerForChange, setSelectedPlayerForChange] = useState<string>('');
   const [arrivalTimeInput, setArrivalTimeInput] = useState<string>('18:30');
-  const [injuryNotesInput, setInjuryNotesInput] = useState<string>('Hamstring tightness - no bowling');
+  const [injuryNotesInput, setInjuryNotesInput] = useState<string>('Shoulder tightness');
   const [swapPlayerId, setSwapPlayerId] = useState<string>('');
   const [undoStack, setUndoStack] = useState<ClubTrainingSession[]>([]);
-  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
-  const [recalculatedFromBlock, setRecalculatedFromBlock] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [vibrationEnabled, setVibrationEnabled] = useState<boolean>(true);
-  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' || navigator.onLine);
-  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
+
   const warnedAt = useRef<Set<number>>(new Set());
-  const latestSessionRef = useRef(session);
-  const latestUpdateRef = useRef(onUpdateSession);
-  latestSessionRef.current = session;
-  latestUpdateRef.current = onUpdateSession;
   const playerById = useMemo(() => new Map(players.map(player => [player.id, player])), [players]);
 
   const currentBlockPlan = session.rotationPlan[activeBlockIdx] || session.rotationPlan[0];
+  const nextBlockPlan = session.rotationPlan[activeBlockIdx + 1];
   const activeResourceAssignments = currentBlockPlan?.resourceAssignments || [];
 
-  // Active selected resource assignment or first
-  const currentResourceAssignment = selectedResourceId
-    ? activeResourceAssignments.find(r => r.resourceId === selectedResourceId) || activeResourceAssignments[0]
-    : activeResourceAssignments[0];
-
-  const currentResourceDef = resources.find(r => r.id === currentResourceAssignment?.resourceId);
-
-  // Timer Countdown Effect
+  // Countdown Effect
   useEffect(() => {
     let interval: any = null;
     if (isTimerRunning) {
@@ -81,34 +66,22 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   useEffect(() => {
     if (secondsRemaining !== 0 || !isTimerRunning) return;
     setIsTimerRunning(false);
-    const currentSession = latestSessionRef.current;
-    setSaveState('saving');
-    latestUpdateRef.current({
-      ...currentSession,
+    onUpdateSession({
+      ...session,
       activeRotationIndex: activeBlockIdx,
       currentLiveState: {
-        activeBlockIndex: currentSession.activeBlockIndex,
+        activeBlockIndex: session.activeBlockIndex,
         activeRotationIndex: activeBlockIdx,
         secondsRemaining: 0,
         isPaused: true,
         updatedAt: new Date().toISOString()
       }
     });
-    setSaveState('saved');
-  }, [secondsRemaining, activeBlockIdx, isTimerRunning]);
-
-  useEffect(() => {
-    const online = () => setIsOnline(true);
-    const offline = () => setIsOnline(false);
-    window.addEventListener('online', online);
-    window.addEventListener('offline', offline);
-    return () => { window.removeEventListener('online', online); window.removeEventListener('offline', offline); };
-  }, []);
+  }, [secondsRemaining, activeBlockIdx, isTimerRunning, session, onUpdateSession]);
 
   useEffect(() => {
     if (![60, 0].includes(secondsRemaining) || warnedAt.current.has(secondsRemaining)) return;
     warnedAt.current.add(secondsRemaining);
-    if (vibrationEnabled && 'vibrate' in navigator) navigator.vibrate(secondsRemaining === 0 ? [200, 100, 200] : 150);
     if (soundEnabled) {
       try {
         const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -121,33 +94,10 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
           oscillator.start();
           oscillator.stop(context.currentTime + 0.15);
         }
-      } catch { /* Browser may require a prior user gesture. */ }
+      } catch { /* AudioContext fallback */ }
     }
-    if (secondsRemaining === 0) setFeedback({ kind: 'success', message: 'Block complete. Timer paused—advance when ready.' });
-  }, [secondsRemaining, soundEnabled, vibrationEnabled]);
-
-  useEffect(() => {
-    if (!isTimerRunning || secondsRemaining <= 0 || secondsRemaining % 15 !== 0) return;
-    setSaveState('saving');
-    const currentSession = latestSessionRef.current;
-    latestUpdateRef.current({ ...currentSession, activeRotationIndex: activeBlockIdx, currentLiveState: { activeBlockIndex: currentSession.activeBlockIndex, activeRotationIndex: activeBlockIdx, secondsRemaining, isPaused: false, updatedAt: new Date().toISOString() } });
-    setSaveState('saved');
-  }, [secondsRemaining, activeBlockIdx, isTimerRunning]);
-
-  const persistLiveState = (updates: Partial<NonNullable<ClubTrainingSession['currentLiveState']>> = {}) => {
-    onUpdateSession({
-      ...session,
-      activeRotationIndex: updates.activeRotationIndex ?? activeBlockIdx,
-      activeBlockIndex: updates.activeBlockIndex ?? session.activeBlockIndex,
-      currentLiveState: {
-        activeBlockIndex: updates.activeBlockIndex ?? session.activeBlockIndex,
-        activeRotationIndex: updates.activeRotationIndex ?? activeBlockIdx,
-        secondsRemaining: updates.secondsRemaining ?? secondsRemaining,
-        isPaused: updates.isPaused ?? !isTimerRunning,
-        updatedAt: new Date().toISOString()
-      }
-    });
-  };
+    if (secondsRemaining === 0) setFeedback('Block complete. Timer paused—advance when ready.');
+  }, [secondsRemaining, soundEnabled]);
 
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -157,26 +107,34 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
 
   const handleNextRotation = () => {
     if (activeBlockIdx < session.rotationPlan.length - 1) {
-      setActiveBlockIdx(prev => prev + 1);
-      const nextBlock = session.rotationPlan[activeBlockIdx + 1];
+      const nextIdx = activeBlockIdx + 1;
+      setActiveBlockIdx(nextIdx);
+      const nextBlock = session.rotationPlan[nextIdx];
       const nextSeconds = (nextBlock?.durationMinutes || session.rotationDurationMinutes || 12) * 60;
       setSecondsRemaining(nextSeconds);
       setIsTimerRunning(false);
       warnedAt.current.clear();
-      setFeedback({ kind: 'success', message: `Advanced to block ${activeBlockIdx + 2}. Timer is paused.` });
-      persistLiveState({ activeRotationIndex: activeBlockIdx + 1, secondsRemaining: nextSeconds, isPaused: true });
+      setFeedback(`Advanced to Block ${nextIdx + 1}.`);
+      onUpdateSession({
+        ...session,
+        activeRotationIndex: nextIdx,
+        currentLiveState: {
+          activeBlockIndex: session.activeBlockIndex,
+          activeRotationIndex: nextIdx,
+          secondsRemaining: nextSeconds,
+          isPaused: true,
+          updatedAt: new Date().toISOString()
+        }
+      });
     } else {
       onCompleteSession();
     }
   };
 
-  const commitChange = (updated: ClubTrainingSession, message: string, marksRecalculation = true) => {
+  const commitChange = (updated: ClubTrainingSession, message: string) => {
     setUndoStack(stack => [...stack.slice(-9), session]);
-    setSaveState('saving');
     onUpdateSession(updated);
-    setSaveState('saved');
-    setFeedback({ kind: 'success', message });
-    if (marksRecalculation) setRecalculatedFromBlock(activeBlockIdx + 1);
+    setFeedback(message);
     setShowChangeModal(false);
     setSelectedPlayerForChange('');
     setSwapPlayerId('');
@@ -187,11 +145,9 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     if (!previous) return;
     onUpdateSession(previous);
     setUndoStack(stack => stack.slice(0, -1));
-    setFeedback({ kind: 'success', message: 'Last live change undone.' });
-    setRecalculatedFromBlock(null);
+    setFeedback('Last live change undone.');
   };
 
-  // Live Action Handlers (strictly future-only recalculation)
   const handleMarkNoShow = () => {
     if (!selectedPlayerForChange) return;
     const updated = handleLiveNoShow(session, selectedPlayerForChange, activeBlockIdx, players, teams, resources);
@@ -210,11 +166,6 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     commitChange(updated, 'Restriction applied. Future blocks recalculated.');
   };
 
-  const handleForceRecalculateFuture = () => {
-    const updated = recalculateFutureRotations(session, activeBlockIdx, players, teams, resources);
-    commitChange(updated, 'Future blocks recalculated successfully.');
-  };
-
   const handleSwapPlayers = () => {
     if (!selectedPlayerForChange || !swapPlayerId || selectedPlayerForChange === swapPlayerId) return;
     commitChange(handleManualSwap(session, selectedPlayerForChange, swapPlayerId, activeBlockIdx), 'Players swapped in future blocks.');
@@ -226,20 +177,19 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     const nextDuration = Math.max(5, active.durationMinutes + deltaMinutes);
     const appliedDelta = nextDuration - active.durationMinutes;
     if (appliedDelta === 0) return;
-    const toMinutes = (time: string) => { const [hours, minutes] = time.split(':').map(Number); return hours * 60 + minutes; };
-    const toTime = (minutes: number) => `${Math.floor(minutes / 60).toString().padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}`;
+    const toMinutes = (time: string) => { const [h, m] = time.split(':').map(Number); return h * 60 + m; };
+    const toTime = (m: number) => `${Math.floor(m / 60).toString().padStart(2, '0')}:${(m % 60).toString().padStart(2, '0')}`;
     const rotationPlan = session.rotationPlan.map((block, index) => index < activeBlockIdx ? block : index === activeBlockIdx
       ? { ...block, durationMinutes: nextDuration, endTime: toTime(toMinutes(block.endTime) + appliedDelta) }
       : { ...block, startTime: toTime(toMinutes(block.startTime) + appliedDelta), endTime: toTime(toMinutes(block.endTime) + appliedDelta) });
-    setSecondsRemaining(value => Math.max(0, value + appliedDelta * 60));
-    commitChange({ ...session, rotationPlan, finishTime: rotationPlan.at(-1)?.endTime || session.finishTime }, `Current block ${appliedDelta > 0 ? 'extended' : 'shortened'} by ${Math.abs(appliedDelta)} minutes.`, false);
+    setSecondsRemaining(val => Math.max(0, val + appliedDelta * 60));
+    commitChange({ ...session, rotationPlan, finishTime: rotationPlan.at(-1)?.endTime || session.finishTime }, `Block ${appliedDelta > 0 ? 'extended' : 'shortened'} by ${Math.abs(appliedDelta)} mins.`);
   };
 
   const isLastBlock = activeBlockIdx === session.rotationPlan.length - 1;
-  const getPlayer = (id: string) => playerById.get(id);
 
   return (
-    <div className="live-viewport" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
       {/* Top Header Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button
@@ -248,170 +198,240 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
         >
           <ArrowLeft size={18} /> Exit Live Mode
         </button>
-        <button
-          onClick={() => setIsLeaderViewActive(!isLeaderViewActive)}
-          style={{
-            background: isLeaderViewActive ? 'var(--accent-gold)' : 'var(--bg-surface-elevated)',
-            border: '1px solid var(--accent-gold)',
-            color: isLeaderViewActive ? '#000' : 'var(--accent-gold)',
-            padding: '4px 10px',
-            borderRadius: '6px',
-            fontWeight: 800,
-            fontSize: '0.75rem',
-            cursor: 'pointer'
-          }}
-        >
-          {isLeaderViewActive ? 'SHOW COORDINATOR VIEW' : 'RESOURCE LEADER VIEW'}
-        </button>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span className={`badge ${isOnline ? 'badge-green' : 'badge-warning'}`}>{isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}{isOnline ? saveState === 'saving' ? 'Saving…' : 'Saved' : 'Offline'}</span>
-          <button aria-label={soundEnabled ? 'Disable audible warnings' : 'Enable audible warnings'} className="btn btn-secondary" onClick={() => setSoundEnabled(value => !value)} style={{ width: '44px', padding: 0 }}>{soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
-          <span className="badge badge-live">Live</span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            aria-label="Toggle sound alerts"
+            className="btn btn-secondary"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            style={{ width: 'auto', padding: '0 8px', height: '30px' }}
+          >
+            {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+          </button>
+          <span className="badge badge-live">LIVE</span>
         </div>
       </div>
 
       {/* Hero Timer Display */}
-      <div className="live-timer-hero">
-        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          ROTATION BLOCK {activeBlockIdx + 1} OF {session.rotationPlan.length} ({currentBlockPlan?.startTime || '18:00'} - {currentBlockPlan?.endTime || '18:12'})
+      <div className="live-timer-hero-v2">
+        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+          BLOCK {activeBlockIdx + 1} OF {session.rotationPlan.length} ({currentBlockPlan?.startTime || '18:00'}–{currentBlockPlan?.endTime || '18:12'})
         </div>
 
-        <div className="live-timer-digits">
+        <div className="live-timer-digits-v2">
           {formatTime(secondsRemaining)}
         </div>
 
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>
-          📍 {activeResourceAssignments.length} Active Resources • {session.expectedPlayerIds.length} Players Attending
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          {activeResourceAssignments.length} areas · {session.expectedPlayerIds.length} players
         </div>
       </div>
 
-      {/* Resource Tab Selector */}
-      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
-        {activeResourceAssignments.map(res => (
-          <button
-            key={res.resourceId}
-            onClick={() => setSelectedResourceId(res.resourceId)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '8px',
-              border: (currentResourceAssignment?.resourceId === res.resourceId) ? '2px solid var(--accent-gold)' : '1px solid var(--border-light)',
-              background: (currentResourceAssignment?.resourceId === res.resourceId) ? 'var(--accent-gold-soft)' : 'var(--bg-surface-card)',
-              color: (currentResourceAssignment?.resourceId === res.resourceId) ? 'var(--accent-gold)' : 'var(--text-main)',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {res.resourceName} ({res.batterPlayerIds.length}B / {res.bowlerPodPlayerIds.length}W)
-          </button>
-        ))}
-      </div>
+      {/* Feedback Banner */}
+      {feedback && (
+        <div className="card" role="status" style={{ padding: '8px 12px', fontSize: '0.8rem', color: '#4ade80', fontWeight: 700, margin: 0 }}>
+          ✓ {feedback}
+        </div>
+      )}
 
-      {/* Main View Area */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {isLeaderViewActive && currentResourceAssignment ? (
-          <ResourceLeaderView
-            assignment={currentResourceAssignment}
-            resourceDef={currentResourceDef}
-            players={players}
-            blockTitle={`Block ${activeBlockIdx + 1}`}
-            blockTimeStr={`${currentBlockPlan?.startTime} - ${currentBlockPlan?.endTime}`}
-            onPlayerClick={onOpenQuickObservation}
-          />
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {activeResourceAssignments.map(resAssign => {
-              const batters = resAssign.batterPlayerIds.map(getPlayer).filter(Boolean) as Player[];
-              const bowlers = resAssign.bowlerPodPlayerIds.map(getPlayer).filter(Boolean) as Player[];
+      {/* Current Block Training Areas List */}
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+          CURRENT BLOCK
+        </div>
 
-              return (
-                <div key={resAssign.resourceId} className="card" style={{ padding: '12px', borderLeft: '4px solid var(--primary-green-light)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-gold)' }}>
-                      {resAssign.resourceName}
-                    </div>
-                    <span className={`badge ${recalculatedFromBlock !== null && activeBlockIdx >= recalculatedFromBlock ? 'badge-warning' : 'badge-green'}`}>{recalculatedFromBlock !== null && activeBlockIdx >= recalculatedFromBlock ? 'Recalculated' : 'Preserved'}</span>
-                  </div>
+        {activeResourceAssignments.map(resAssign => {
+          const isExpanded = expandedAreaId === resAssign.resourceId;
+          const batters = resAssign.batterPlayerIds.map(id => playerById.get(id)?.name).filter(Boolean);
+          const bowlers = resAssign.bowlerPodPlayerIds.map(id => playerById.get(id)?.name).filter(Boolean);
 
-                  {/* Batters */}
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px' }}>
-                    BATTERS: {batters.map(b => b.name).join(', ') || 'None'}
-                  </div>
+          const batterSummary = batters.length > 0 ? `${batters.slice(0, 2).join(' + ')} batting` : '';
+          const bowlerSummary = bowlers.length > 0 ? `${bowlers.length} bowler${bowlers.length === 1 ? '' : 's'}` : '';
+          const summaryParts = [batterSummary, bowlerSummary].filter(Boolean).join(' · ');
 
-                  {/* Bowlers */}
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#60a5fa' }}>
-                    BOWLING POD: {bowlers.map(b => b.name).join(', ') || 'None'}
-                  </div>
+          return (
+            <div
+              key={resAssign.resourceId}
+              className="live-area-card-v2"
+              onClick={() => setExpandedAreaId(isExpanded ? null : resAssign.resourceId)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-gold)' }}>
+                  {resAssign.resourceName}
                 </div>
-              );
-            })}
+                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </div>
+
+              {summaryParts && (
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  {summaryParts}
+                </div>
+              )}
+
+              {isExpanded && (
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem' }}>
+                  {batters.length > 0 && (
+                    <div><strong style={{ color: 'var(--accent-gold)' }}>Batting:</strong> {batters.join(', ')}</div>
+                  )}
+                  {bowlers.length > 0 && (
+                    <div><strong style={{ color: '#60a5fa' }}>Bowling:</strong> {bowlers.join(', ')}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Up Next Preview */}
+        {nextBlockPlan && (
+          <div className="card" style={{ padding: '12px', background: 'var(--bg-surface-elevated)', marginTop: '6px' }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              onClick={() => setShowNextPreview(!showNextPreview)}
+            >
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>UP NEXT</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Block {activeBlockIdx + 2} ({nextBlockPlan.durationMinutes} min)</div>
+              </div>
+              {showNextPreview ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </div>
+
+            {showNextPreview && (
+              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                {nextBlockPlan.resourceAssignments.map(r => (
+                  <div key={r.resourceId}><strong>{r.resourceName}:</strong> {r.batterPlayerIds.length} bat · {r.bowlerPodPlayerIds.length} bowl</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Live Adjustment Action Bar */}
-      <div className="card" style={{ padding: '8px', background: 'var(--bg-surface-elevated)' }}>
-        <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textAlign: 'center' }}>
-          LIVE SESSION CHANGE CONTROLS (FUTURE BLOCKS RECALCULATE ONLY)
-        </div>
-        <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
-          <button className="btn btn-secondary" onClick={() => setShowChangeModal(true)} style={{ width: 'auto' }}><Settings2 size={14} /> Change</button>
-          <button className="btn btn-secondary" onClick={handleUndo} disabled={undoStack.length === 0} style={{ width: 'auto' }}><Undo2 size={14} /> Undo</button>
-
-          <button className="btn btn-secondary" onClick={() => adjustActiveDuration(2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}>+2 MINS</button>
-          <button className="btn btn-secondary" onClick={() => adjustActiveDuration(-2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem' }}>-2 MINS</button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={handleForceRecalculateFuture}
-            style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.7rem', color: 'var(--accent-gold)' }}
-          >
-            <RefreshCw size={12} /> RECALCULATE FUTURE
-          </button>
-        </div>
+      {/* Adjust Session Sub-Bar */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '4px 0' }}>
+        <button className="btn btn-secondary" onClick={() => setShowChangeModal(true)} style={{ width: 'auto', padding: '0 10px', height: '32px', fontSize: '0.75rem', flexShrink: 0 }}>
+          <Settings2 size={14} /> Adjust Session
+        </button>
+        <button className="btn btn-secondary" onClick={handleUndo} disabled={undoStack.length === 0} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.75rem', flexShrink: 0 }}>
+          <Undo2 size={14} /> Undo
+        </button>
+        <button className="btn btn-secondary" onClick={() => adjustActiveDuration(2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.75rem', flexShrink: 0 }}>
+          +2 min
+        </button>
+        <button className="btn btn-secondary" onClick={() => adjustActiveDuration(-2)} style={{ width: 'auto', padding: '0 8px', height: '32px', fontSize: '0.75rem', flexShrink: 0 }}>
+          -2 min
+        </button>
       </div>
 
-      {feedback && <div role="status" className="card" style={{ padding: '8px 12px', margin: 0, color: feedback.kind === 'error' ? '#f97316' : 'var(--primary-green-light)' }}>{feedback.message}</div>}
-
-      {/* Sticky Bottom Play Controls */}
-      <div className="live-action-grid">
+      {/* Primary Live Sticky Actions */}
+      <div className="live-sticky-actions-v2">
         <button
-          className="btn btn-secondary live-action-btn"
+          className="btn btn-secondary"
           onClick={() => {
             const nextRunning = !isTimerRunning;
             setIsTimerRunning(nextRunning);
-            persistLiveState({ isPaused: !nextRunning });
           }}
+          style={{ flex: 1, height: '44px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
           {isTimerRunning ? <Pause size={18} /> : <Play size={18} />}
-          {isTimerRunning ? 'PAUSE TIMER' : 'RESUME TIMER'}
+          {isTimerRunning ? 'Pause' : 'Resume'}
         </button>
 
         <button
-          className="btn btn-gold live-action-btn"
+          className="btn btn-gold"
           onClick={handleNextRotation}
+          style={{ flex: 2, height: '44px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
           <SkipForward size={18} />
-          {isLastBlock ? 'FINISH SESSION' : `ADVANCE TO BLOCK ${activeBlockIdx + 2}`}
+          {isLastBlock ? 'Finish Session' : `Advance to Block ${activeBlockIdx + 2}`}
         </button>
       </div>
 
+      {/* Adjust Session Bottom Sheet */}
       {showChangeModal && (
         <div className="bottom-sheet-overlay" onClick={() => setShowChangeModal(false)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="live-change-title" className="bottom-sheet-content" onClick={event => event.stopPropagation()}>
-            <h2 id="live-change-title">Change live session</h2>
-            <label>Change type<select value={changeType} onChange={event => setChangeType(event.target.value as LiveChangeType)}><option value="absent">Absent / no-show</option><option value="late">Late arrival</option><option value="injury">Injury or restriction</option><option value="swap">Swap future allocations</option></select></label>
-            <label>Player<select value={selectedPlayerForChange} onChange={event => setSelectedPlayerForChange(event.target.value)}><option value="">Choose player</option>{players.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
-            {changeType === 'late' && <label>Updated arrival time<input type="time" value={arrivalTimeInput} onChange={event => setArrivalTimeInput(event.target.value)} /></label>}
-            {changeType === 'injury' && <label>Restriction notes<input value={injuryNotesInput} onChange={event => setInjuryNotesInput(event.target.value)} /></label>}
-            {changeType === 'swap' && <label>Swap with<select value={swapPlayerId} onChange={event => setSwapPlayerId(event.target.value)}><option value="">Choose player</option>{players.filter(player => player.id !== selectedPlayerForChange).map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
-            <label style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}><input type="checkbox" checked={vibrationEnabled} onChange={event => setVibrationEnabled(event.target.checked)} /> Vibration warnings</label>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}><button className="btn btn-secondary" onClick={() => setShowChangeModal(false)}>Cancel</button><button className="btn btn-gold" disabled={!selectedPlayerForChange || (changeType === 'swap' && !swapPlayerId)} onClick={() => { if (changeType === 'absent') handleMarkNoShow(); else if (changeType === 'late') handleMarkLateArrival(); else if (changeType === 'injury') handleMarkInjury(); else handleSwapPlayers(); }}>Apply change</button></div>
+          <div role="dialog" aria-modal="true" aria-labelledby="live-change-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 id="live-change-title" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+                ADJUST TRAINING
+              </h3>
+              <button onClick={() => setShowChangeModal(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>WHAT CHANGED?</label>
+                <select
+                  value={changeType}
+                  onChange={e => setChangeType(e.target.value as LiveChangeType)}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px', fontSize: '0.85rem' }}
+                >
+                  <option value="absent">Player unavailable / no-show</option>
+                  <option value="late">Player arrived late</option>
+                  <option value="injury">Player injured / restricted</option>
+                  <option value="swap">Swap player groups</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PLAYER</label>
+                <select
+                  value={selectedPlayerForChange}
+                  onChange={e => setSelectedPlayerForChange(e.target.value)}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px', fontSize: '0.85rem' }}
+                >
+                  <option value="">Choose player...</option>
+                  {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              {changeType === 'late' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>ARRIVAL TIME</label>
+                  <input type="time" value={arrivalTimeInput} onChange={e => setArrivalTimeInput(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px' }} />
+                </div>
+              )}
+
+              {changeType === 'injury' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>RESTRICTION NOTES</label>
+                  <input type="text" value={injuryNotesInput} onChange={e => setInjuryNotesInput(e.target.value)} placeholder="e.g. Shoulder tightness - no bowling" style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px' }} />
+                </div>
+              )}
+
+              {changeType === 'swap' && (
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SWAP WITH</label>
+                  <select
+                    value={swapPlayerId}
+                    onChange={e => setSwapPlayerId(e.target.value)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', marginTop: '4px', fontSize: '0.85rem' }}
+                  >
+                    <option value="">Choose player...</option>
+                    {players.filter(p => p.id !== selectedPlayerForChange).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <button
+                className="btn btn-gold"
+                disabled={!selectedPlayerForChange || (changeType === 'swap' && !swapPlayerId)}
+                onClick={() => {
+                  if (changeType === 'absent') handleMarkNoShow();
+                  else if (changeType === 'late') handleMarkLateArrival();
+                  else if (changeType === 'injury') handleMarkInjury();
+                  else handleSwapPlayers();
+                }}
+                style={{ marginTop: '8px' }}
+              >
+                Apply Changes to Future Rotations
+              </button>
+            </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };
