@@ -73,11 +73,11 @@ export async function seedDefaultFirestoreIfEmpty(): Promise<void> {
     batch.set(doc(db, 'matches', SEED_MATCH_RECORD.id), SEED_MATCH_RECORD);
 
     SEED_DEVELOPMENT_FOCUSES.forEach(f => {
-      batch.set(doc(db, 'developmentFocuses', f.id), { ...f, visibility: f.visibility || 'all_coaches' });
+      batch.set(doc(db, 'developmentFocuses', f.id), f);
     });
 
     SEED_OBSERVATIONS.forEach(o => {
-      batch.set(doc(db, 'observations', o.id), { ...o, visibility: o.visibility || 'all_coaches' });
+      batch.set(doc(db, 'observations', o.id), o);
     });
 
     SEED_CLUB_TEAMS.forEach(team => batch.set(doc(db, 'clubTeams', team.id), team));
@@ -189,7 +189,7 @@ export const CloudStorageEngine = {
     return onSnapshot(collection(db, 'developmentFocuses'), snap => {
       let list = snap.docs.map(d => d.data() as DevelopmentFocus);
       if (role === 'assistant_coach') {
-        list = list.filter(f => f.visibility !== 'head_coach_only');
+        list = list.filter(f => f.access.staffVisibility !== 'head_coach_only');
       }
       callback(list);
     });
@@ -197,15 +197,15 @@ export const CloudStorageEngine = {
   saveDevelopmentFocuses: async (focuses: DevelopmentFocus[]): Promise<void> => {
     const batch = writeBatch(db);
     focuses.forEach(f => {
-      batch.set(doc(db, 'developmentFocuses', f.id), { ...f, visibility: f.visibility || 'all_coaches' });
+      batch.set(doc(db, 'developmentFocuses', f.id), f);
     });
     await batch.commit();
   },
   addDevelopmentFocus: async (focus: DevelopmentFocus): Promise<void> => {
-    await setDoc(doc(db, 'developmentFocuses', focus.id), { ...focus, visibility: focus.visibility || 'all_coaches' });
+    await setDoc(doc(db, 'developmentFocuses', focus.id), focus);
   },
   updateDevelopmentFocus: async (focus: DevelopmentFocus): Promise<void> => {
-    await setDoc(doc(db, 'developmentFocuses', focus.id), { ...focus, visibility: focus.visibility || 'all_coaches' });
+    await setDoc(doc(db, 'developmentFocuses', focus.id), focus);
   },
 
   // Observations (Role-sensitive filtering for assistant_coach)
@@ -213,7 +213,7 @@ export const CloudStorageEngine = {
     return onSnapshot(collection(db, 'observations'), snap => {
       let list = snap.docs.map(d => d.data() as Observation);
       if (role === 'assistant_coach') {
-        list = list.filter(o => o.visibility !== 'head_coach_only');
+        list = list.filter(o => o.access.staffVisibility !== 'head_coach_only');
       }
       callback(list);
     });
@@ -221,12 +221,12 @@ export const CloudStorageEngine = {
   saveObservations: async (observations: Observation[]): Promise<void> => {
     const batch = writeBatch(db);
     observations.forEach(o => {
-      batch.set(doc(db, 'observations', o.id), { ...o, visibility: o.visibility || 'all_coaches' });
+      batch.set(doc(db, 'observations', o.id), o);
     });
     await batch.commit();
   },
   addObservation: async (obs: Observation): Promise<void> => {
-    await setDoc(doc(db, 'observations', obs.id), { ...obs, visibility: obs.visibility || 'all_coaches' });
+    await setDoc(doc(db, 'observations', obs.id), obs);
   },
 
   subscribeToClubTeams: (callback: (teams: ClubTeam[]) => void): (() => void) =>

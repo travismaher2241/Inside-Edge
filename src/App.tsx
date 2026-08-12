@@ -8,7 +8,7 @@ import {
   type CoachProfileLoadError
 } from './modules/cricket/authService';
 import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
-import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting, ActiveScope } from './types/cricket';
+import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusLifecycleState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting, ActiveScope } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
@@ -20,13 +20,15 @@ import { LibraryView } from './views/LibraryView';
 import { LoginView } from './views/LoginView';
 import { AcceptInviteView } from './views/AcceptInviteView';
 import { CoachManagerModal } from './components/cricket/CoachManagerModal';
-import { QuickObservationDrawer } from './components/cricket/QuickObservationDrawer';
+import { QuickObservationModal } from './components/cricket/planner/QuickObservationModal';
 import { FieldBoardModal } from './components/cricket/FieldBoardModal';
 import { LiveClubSession } from './components/cricket/planner/LiveClubSession';
 import { activityToClubBlock, selectCurrentClubSession } from './modules/cricket/sessionModel';
 import { completeSessionWithFairness } from './modules/cricket/clubRotationEngine';
 import { SEED_TEAM, SEED_PLAYERS, SEED_ACTIVITIES, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
+const PublicRsvpView = lazy(() => import('./views/PublicRsvpView').then(m => ({ default: m.PublicRsvpView })));
+const PublicProgressView = lazy(() => import('./views/PublicProgressView').then(m => ({ default: m.PublicProgressView })));
 
 const TEST_ACCESS_COACH: CoachUser = {
   uid: 'test-access',
@@ -156,17 +158,11 @@ export function App() {
   }, [matches, selectedMatchId]);
 
   // Save Handlers (Persisted to Firestore via CloudStorageEngine, or kept local-only in Test Access mode)
-  const handleSaveObservation = (obsData: Omit<Observation, 'id' | 'timestamp'>) => {
-    const newObs: Observation = {
-      ...obsData,
-      id: `obs-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      coachName: effectiveCoachProfile?.displayName || team.headCoachName
-    };
+  const handleSaveObservation = (observation: Observation) => {
     if (isTestMode) {
-      setObservations(prev => [...prev, newObs]);
+      setObservations(prev => [...prev, observation]);
     } else {
-      CloudStorageEngine.addObservation(newObs);
+      CloudStorageEngine.addObservation(observation);
     }
   };
 
@@ -195,7 +191,7 @@ export function App() {
     }
   };
 
-  const handleUpdateDevelopmentFocusState = (focusId: string, newState: FocusState) => {
+  const handleUpdateDevelopmentFocusState = (focusId: string, newState: FocusLifecycleState) => {
     const target = focuses.find(f => f.id === focusId);
     if (target) {
       const updated = { ...target, state: newState };
@@ -303,13 +299,37 @@ export function App() {
     );
   }
 
-  // Auth Gate: Unauthenticated users are presented with LoginView
-  if (isAuthLoading && !isTestMode) {
+  // Route check 3: Public Parent RSVP Page (/rsvp/:token) — No login required
+  if (pathname.startsWith('/rsvp/')) {
+    const token = pathname.replace('/rsvp/', '').trim();
+    return (
+      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Training RSVP Page...</div>}>
+        <PublicRsvpView token={token} />
+      </Suspense>
+    );
+  }
+
+  // Route check 4: Public Parent Progress Summary Page (/progress/:token) — No login required
+  if (pathname.startsWith('/progress/')) {
+    const progressToken = pathname.replace('/progress/', '').trim();
+    return (
+      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Player Progress Report...</div>}>
+        <PublicProgressView token={progressToken} />
+      </Suspense>
+    );
+  }
+
+  // Auth Gate: Unauthenticated users are presented with LoginView (bypassed if live session is active)
+  if (isAuthLoading && !isTestMode && !isLiveMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
         Authenticating coach session...
       </div>
     );
+  }
+
+  if (!isTestMode && (!authUser || !coachProfile) && !isLiveMode) {
+    return <LoginView onTestAccess={() => setIsTestMode(true)} />;
   }
 
   // A signed-in Firebase user without a loaded coach profile is not the same
@@ -349,12 +369,16 @@ export function App() {
           onOpenQuickObservation={p => setObservedPlayer(p)}
           onCompleteSession={handleCompleteSession}
         />
-        <QuickObservationDrawer
-          player={observedPlayer}
-          developmentFocuses={focuses}
-          onClose={() => setObservedPlayer(null)}
-          onSaveObservation={handleSaveObservation}
-        />
+        {observedPlayer && (
+          <QuickObservationModal
+            player={observedPlayer}
+            sessionId={currentClubSession?.id}
+            activeFocuses={focuses.filter(f => f.playerId === observedPlayer.id && f.state !== 'ARCHIVED')}
+            isOpen={!!observedPlayer}
+            onClose={() => setObservedPlayer(null)}
+            onSaved={handleSaveObservation}
+          />
+        )}
       </div>
     );
   }
@@ -461,12 +485,16 @@ export function App() {
         />
       )}
 
-      <QuickObservationDrawer
-        player={observedPlayer}
-        developmentFocuses={focuses}
-        onClose={() => setObservedPlayer(null)}
-        onSaveObservation={handleSaveObservation}
-      />
+      {observedPlayer && (
+        <QuickObservationModal
+          player={observedPlayer}
+          sessionId={currentClubSession?.id}
+          activeFocuses={focuses.filter(f => f.playerId === observedPlayer.id && f.state !== 'ARCHIVED')}
+          isOpen={!!observedPlayer}
+          onClose={() => setObservedPlayer(null)}
+          onSaved={handleSaveObservation}
+        />
+      )}
 
       {isFieldBoardOpen && (
         <Suspense fallback={null}>

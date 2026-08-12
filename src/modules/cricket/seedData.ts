@@ -269,69 +269,94 @@ export const SEED_DEVELOPMENT_FOCUSES: DevelopmentFocus[] = [
     playerId: 'p-1',
     domain: 'Batting',
     focusStatement: 'Decision-making outside off stump against full seam',
-    state: 'Current Focus',
+    state: 'CURRENT',
     why: '3 dismissals driving away from body in last 2 matches',
     startDate: '2026-08-04',
     reviewDate: '2026-08-25',
-    evidenceObservationIds: ['obs-1', 'obs-2'],
-    coachSummary: 'Leaving improving; still chases width early when fatigued.'
+    history: [
+      { fromState: null, toState: 'CURRENT', changedAt: '2026-08-04T00:00:00Z', changedByUserId: 'coach_head_1' }
+    ],
+    coachSummary: 'Leaving improving; still chases width early when fatigued.',
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true }
   },
   {
     id: 'focus-2',
     playerId: 'p-2',
     domain: 'Bowling',
     focusStatement: 'Consistent front-foot release height & landing seam control',
-    state: 'Developing',
+    state: 'DEVELOPING',
     why: 'Too many full tosses in final 2 overs against Glenferrie',
     startDate: '2026-07-28',
     reviewDate: '2026-08-18',
-    evidenceObservationIds: ['obs-3'],
-    coachSummary: 'Rhythm looks sharper. Keep workload under 36 balls per session.'
+    history: [
+      { fromState: null, toState: 'CURRENT', changedAt: '2026-07-28T00:00:00Z', changedByUserId: 'coach_head_1' },
+      { fromState: 'CURRENT', toState: 'DEVELOPING', changedAt: '2026-08-05T00:00:00Z', changedByUserId: 'coach_head_1' }
+    ],
+    coachSummary: 'Rhythm looks sharper. Keep workload under 36 balls per session.',
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true }
   },
   {
     id: 'focus-3',
     playerId: 'p-4',
     domain: 'Batting',
     focusStatement: 'Strike rotation against spin in middle overs',
-    state: 'Current Focus',
+    state: 'CURRENT',
     why: 'Dot ball percentage exceeded 65% in middle overs',
     startDate: '2026-08-01',
     reviewDate: '2026-08-22',
-    evidenceObservationIds: [],
-    coachSummary: 'Focus on soft hands drop-and-run into single zones.'
+    history: [
+      { fromState: null, toState: 'CURRENT', changedAt: '2026-08-01T00:00:00Z', changedByUserId: 'coach_head_1' }
+    ],
+    coachSummary: 'Focus on soft hands drop-and-run into single zones.',
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true }
   }
 ];
 
 export const SEED_OBSERVATIONS: Observation[] = [
   {
     id: 'obs-1',
+    operationId: 'op-seed-obs-1',
     playerId: 'p-1',
-    timestamp: '2026-08-08T18:40:00Z',
     source: 'match',
-    tag: 'Decision',
+    tags: ['Decision'],
     textNote: 'Feathered edge to keeper driving at 4th stump line without moving feet.',
-    focusId: 'focus-1',
-    coachName: 'Coach Travis'
+    linkedFocusIds: ['focus-1'],
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true },
+    createdAt: '2026-08-08T18:40:00Z',
+    createdByUserId: 'coach_head_1',
+    baseRevision: 0,
+    revision: 1,
+    syncStatus: 'synced'
   },
   {
     id: 'obs-2',
+    operationId: 'op-seed-obs-2',
     playerId: 'p-1',
-    timestamp: '2026-08-11T18:30:00Z',
     source: 'training',
-    tag: 'Good execution',
+    tags: ['Good execution'],
     textNote: 'Left 4 consecutive out-swingers cleanly in Net 1.',
-    focusId: 'focus-1',
-    coachName: 'Coach Travis'
+    linkedFocusIds: ['focus-1'],
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true },
+    createdAt: '2026-08-11T18:30:00Z',
+    createdByUserId: 'coach_head_1',
+    baseRevision: 0,
+    revision: 1,
+    syncStatus: 'synced'
   },
   {
     id: 'obs-3',
+    operationId: 'op-seed-obs-3',
     playerId: 'p-2',
-    timestamp: '2026-08-08T19:15:00Z',
     source: 'match',
-    tag: 'Needs work',
+    tags: ['Needs work'],
     textNote: 'Yorker length missed full in 19th over, hit for 2 boundaries.',
-    focusId: 'focus-2',
-    coachName: 'Coach Travis'
+    linkedFocusIds: ['focus-2'],
+    access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: true },
+    createdAt: '2026-08-08T19:15:00Z',
+    createdByUserId: 'coach_head_1',
+    baseRevision: 0,
+    revision: 1,
+    syncStatus: 'synced'
   }
 ];
 

@@ -1,6 +1,6 @@
 // Team Roster & Player Profile View for Inside Edge (Supports Team vs Club Context)
 import React, { useState } from 'react';
-import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
+import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusLifecycleState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
 import { getRoleBadgeLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
 import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
 import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
@@ -17,7 +17,7 @@ interface TeamViewProps {
   onUpdateSession?: (session: ClubTrainingSession) => void;
   onOpenQuickObservation: (player: Player) => void;
   onAddDevelopmentFocus: (focus: DevelopmentFocus) => void;
-  onUpdateDevelopmentFocusState: (focusId: string, newState: FocusState) => void;
+  onUpdateDevelopmentFocusState: (focusId: string, newState: FocusLifecycleState) => void;
   onAddPlayer: (player: Player) => void;
   onUpdatePlayer?: (player: Player) => void;
 }
@@ -108,17 +108,19 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
   const handleCreateFocus = () => {
     if (!selectedPlayer || !focusStatement) return;
+    const now = new Date().toISOString();
     const newFocus: DevelopmentFocus = {
       id: `focus-${Date.now()}`,
       playerId: selectedPlayer.id,
       domain: focusDomain,
       focusStatement,
-      state: 'Current Focus',
+      state: 'CURRENT',
       why: focusWhy || 'Identified by coach during training',
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: now.split('T')[0],
       reviewDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      evidenceObservationIds: [],
-      coachSummary: 'Initial focus created.'
+      history: [{ fromState: null, toState: 'CURRENT', changedAt: now, changedByUserId: 'coach_head_1' }],
+      coachSummary: 'Initial focus created.',
+      access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: false }
     };
     onAddDevelopmentFocus(newFocus);
     setFocusStatement('');
@@ -311,7 +313,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* Roster List */}
           <div className="roster-list-container">
             {visiblePlayers.map(p => {
-              const activeFocus = focuses.find(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
+              const activeFocus = focuses.find(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'));
               const isRestricted = Boolean(p.workloadRestriction?.restrictedBowler);
               const playerTeam = clubTeams.find(t => t.id === p.primaryTeamId);
 
@@ -550,7 +552,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
                       <span className="badge badge-gold">[{f.domain}]</span>
                       <select
                         value={f.state}
-                        onChange={e => onUpdateDevelopmentFocusState(f.id, e.target.value as FocusState)}
+                        onChange={e => onUpdateDevelopmentFocusState(f.id, e.target.value as FocusLifecycleState)}
                         style={{
                           background: 'var(--bg-surface-elevated)',
                           border: '1px solid var(--border-gold)',
@@ -598,8 +600,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 playerObservations.map(obs => (
                   <div key={obs.id} className="card" style={{ padding: '12px', background: 'var(--bg-surface-card)', fontSize: '0.82rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.72rem', marginBottom: '4px' }}>
-                      <span className="badge badge-green">{obs.tag}</span>
-                      <span>{new Date(obs.timestamp).toLocaleDateString()}</span>
+                      <span className="badge badge-green">{obs.tags.join(', ')}</span>
+                      <span>{new Date(obs.createdAt).toLocaleDateString()}</span>
                     </div>
                     <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{obs.textNote}</div>
                   </div>

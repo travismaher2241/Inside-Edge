@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { ClubTrainingSession, Player, ClubTeam, TrainingResource } from '../../../types/cricket';
+import type { ClubTrainingSession, Player, ClubTeam, TrainingResource, LiveTimerState } from '../../../types/cricket';
 import { handleLiveNoShow, handleLiveLateArrival, handleLiveInjury, handleManualSwap } from '../../../modules/cricket/clubRotationEngine';
-import { Play, Pause, SkipForward, ArrowLeft, Undo2, Settings2, Volume2, VolumeX, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { IndexedDbJournal } from '../../../storage/indexedDbJournal';
+import { Play, Pause, SkipForward, ArrowLeft, Undo2, Settings2, Volume2, VolumeX, ChevronDown, ChevronUp, X, UserMinus, AlertTriangle } from 'lucide-react';
 
 type LiveChangeType = 'absent' | 'late' | 'injury' | 'swap';
 
@@ -23,14 +24,22 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   resources,
   onUpdateSession,
   onExitLive,
-  onCompleteSession
+  onCompleteSession,
+  onOpenQuickObservation
 }) => {
   const [activeBlockIdx, setActiveBlockIdx] = useState<number>(session.currentLiveState?.activeRotationIndex ?? session.activeRotationIndex ?? 0);
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(
-    session.currentLiveState?.secondsRemaining
+  
+  // Timer State reconstructed from timestamps
+  const [timerStartedAt, setTimerStartedAt] = useState<string | null>(session.currentLiveState?.rotationStartedAt || new Date().toISOString());
+  const [pausedAt, setPausedAt] = useState<string | null>(session.currentLiveState?.pausedAt || null);
+  const [accumulatedPausedSeconds, setAccumulatedPausedSeconds] = useState<number>(session.currentLiveState?.accumulatedPausedSeconds || 0);
+  const [rotationDurationSeconds, setRotationDurationSeconds] = useState<number>(
+    session.currentLiveState?.rotationDurationSeconds
       ?? (session.rotationPlan[session.activeRotationIndex ?? 0]?.durationMinutes || session.rotationDurationMinutes || 12) * 60
   );
+  
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(!session.currentLiveState?.isPaused);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(rotationDurationSeconds);
   const [expandedAreaId, setExpandedAreaId] = useState<string | null>(null);
   const [showNextPreview, setShowNextPreview] = useState<boolean>(false);
 
@@ -52,33 +61,33 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   const nextBlockPlan = session.rotationPlan[activeBlockIdx + 1];
   const activeResourceAssignments = currentBlockPlan?.resourceAssignments || [];
 
-  // Countdown Effect
+  // Load Persisted Undo Stack from IndexedDB on mount
+  useEffect(() => {
+    async function loadPersistedState() {
+      const persistedStack = await IndexedDbJournal.getUndoStack(session.id);
+      if (persistedStack && persistedStack.length > 0) {
+        setUndoStack(persistedStack);
+      }
+    }
+    loadPersistedState();
+  }, [session.id]);
+
+  // Timestamp-based Timer Reconstruction
   useEffect(() => {
     let interval: any = null;
     if (isTimerRunning) {
       interval = setInterval(() => {
-        setSecondsRemaining(prev => Math.max(0, prev - 1));
+        const now = Date.now();
+        const startMs = timerStartedAt ? new Date(timerStartedAt).getTime() : now;
+        const elapsedSecs = Math.floor((now - startMs) / 1000) - accumulatedPausedSeconds;
+        const remaining = Math.max(0, rotationDurationSeconds - Math.max(0, elapsedSecs));
+        setSecondsRemaining(remaining);
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning]);
+  }, [isTimerRunning, timerStartedAt, accumulatedPausedSeconds, rotationDurationSeconds]);
 
-  useEffect(() => {
-    if (secondsRemaining !== 0 || !isTimerRunning) return;
-    setIsTimerRunning(false);
-    onUpdateSession({
-      ...session,
-      activeRotationIndex: activeBlockIdx,
-      currentLiveState: {
-        activeBlockIndex: session.activeBlockIndex,
-        activeRotationIndex: activeBlockIdx,
-        secondsRemaining: 0,
-        isPaused: true,
-        updatedAt: new Date().toISOString()
-      }
-    });
-  }, [secondsRemaining, activeBlockIdx, isTimerRunning, session, onUpdateSession]);
-
+  // Alarm & auto-pause at 60s and 0s remaining
   useEffect(() => {
     if (![60, 0].includes(secondsRemaining) || warnedAt.current.has(secondsRemaining)) return;
     warnedAt.current.add(secondsRemaining);
@@ -105,25 +114,63 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Persist Live State to IndexedDB on mutation
+  const persistState = (updatedSession: ClubTrainingSession) => {
+    onUpdateSession(updatedSession);
+    void IndexedDbJournal.saveLiveSession(updatedSession);
+  };
+
+  const buildTimerState = (overrides: Partial<LiveTimerState> = {}): LiveTimerState => ({
+    rotationStartedAt: timerStartedAt,
+    rotationDurationSeconds,
+    pausedAt,
+    accumulatedPausedSeconds,
+    isPaused: !isTimerRunning,
+    activeBlockIndex: session.activeBlockIndex,
+    activeRotationIndex: activeBlockIdx,
+    updatedAt: new Date().toISOString(),
+    ...overrides
+  });
+
+  // Auto-pause and persist paused live state when the block timer hits zero
+  useEffect(() => {
+    if (secondsRemaining !== 0 || !isTimerRunning) return;
+    setIsTimerRunning(false);
+    persistState({
+      ...session,
+      activeRotationIndex: activeBlockIdx,
+      currentLiveState: buildTimerState({ isPaused: true, pausedAt: new Date().toISOString() })
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondsRemaining, isTimerRunning]);
+
   const handleNextRotation = () => {
     if (activeBlockIdx < session.rotationPlan.length - 1) {
       const nextIdx = activeBlockIdx + 1;
-      setActiveBlockIdx(nextIdx);
       const nextBlock = session.rotationPlan[nextIdx];
-      const nextSeconds = (nextBlock?.durationMinutes || session.rotationDurationMinutes || 12) * 60;
-      setSecondsRemaining(nextSeconds);
-      setIsTimerRunning(false);
+      const nextDurationSeconds = (nextBlock?.durationMinutes || session.rotationDurationMinutes || 12) * 60;
+      const now = new Date().toISOString();
+      setActiveBlockIdx(nextIdx);
+      setTimerStartedAt(now);
+      setPausedAt(null);
+      setAccumulatedPausedSeconds(0);
+      setRotationDurationSeconds(nextDurationSeconds);
+      setSecondsRemaining(nextDurationSeconds);
+      setIsTimerRunning(true);
       warnedAt.current.clear();
       setFeedback(`Advanced to Block ${nextIdx + 1}.`);
-      onUpdateSession({
+      persistState({
         ...session,
         activeRotationIndex: nextIdx,
         currentLiveState: {
+          rotationStartedAt: now,
+          rotationDurationSeconds: nextDurationSeconds,
+          pausedAt: null,
+          accumulatedPausedSeconds: 0,
+          isPaused: false,
           activeBlockIndex: session.activeBlockIndex,
           activeRotationIndex: nextIdx,
-          secondsRemaining: nextSeconds,
-          isPaused: true,
-          updatedAt: new Date().toISOString()
+          updatedAt: now
         }
       });
     } else {
@@ -132,8 +179,10 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   };
 
   const commitChange = (updated: ClubTrainingSession, message: string) => {
-    setUndoStack(stack => [...stack.slice(-9), session]);
-    onUpdateSession(updated);
+    const nextStack = [...undoStack.slice(-19), session];
+    setUndoStack(nextStack);
+    void IndexedDbJournal.saveUndoStack(session.id, nextStack);
+    persistState(updated);
     setFeedback(message);
     setShowChangeModal(false);
     setSelectedPlayerForChange('');
@@ -143,9 +192,22 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   const handleUndo = () => {
     const previous = undoStack.at(-1);
     if (!previous) return;
-    onUpdateSession(previous);
-    setUndoStack(stack => stack.slice(0, -1));
+    const nextStack = undoStack.slice(0, -1);
+    setUndoStack(nextStack);
+    void IndexedDbJournal.saveUndoStack(session.id, nextStack);
+    persistState(previous);
     setFeedback('Last live change undone.');
+  };
+
+  // 1-Tap Quick Actions for sub-4-second outdoor execution
+  const handleQuickMarkAbsent = (playerId: string) => {
+    const updated = handleLiveNoShow(session, playerId, activeBlockIdx, players, teams, resources);
+    commitChange(updated, `${playerById.get(playerId)?.name || 'Player'} marked absent. Active block slot preserved; future blocks recalculated.`);
+  };
+
+  const handleQuickMarkInjury = (playerId: string) => {
+    const updated = handleLiveInjury(session, playerId, 'Live soreness/injury', activeBlockIdx, players, teams, resources);
+    commitChange(updated, `Restriction applied to ${playerById.get(playerId)?.name || 'Player'}. Future blocks recalculated.`);
   };
 
   const handleMarkNoShow = () => {
@@ -269,12 +331,60 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
               )}
 
               {isExpanded && (
-                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem' }}>
-                  {batters.length > 0 && (
-                    <div><strong style={{ color: 'var(--accent-gold)' }}>Batting:</strong> {batters.join(', ')}</div>
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.8rem' }}>
+                  {resAssign.batterPlayerIds.length > 0 && (
+                    <div>
+                      <strong style={{ color: 'var(--accent-gold)', display: 'block', marginBottom: '4px' }}>Batting:</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {resAssign.batterPlayerIds.map(id => {
+                          const p = playerById.get(id);
+                          if (!p) return null;
+                          return (
+                            <div key={id} style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 700 }}>{p.name}</span>
+                              {onOpenQuickObservation && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onOpenQuickObservation(p); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--accent-gold)' }} title="Quick Note">
+                                  📝
+                                </button>
+                              )}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleQuickMarkAbsent(id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#ef4444' }} title="Mark Absent (Preserves Active Block Slot)">
+                                <UserMinus size={14} />
+                              </button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleQuickMarkInjury(id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#eab308' }} title="Mark Injured">
+                                <AlertTriangle size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                  {bowlers.length > 0 && (
-                    <div><strong style={{ color: '#60a5fa' }}>Bowling:</strong> {bowlers.join(', ')}</div>
+                  {resAssign.bowlerPodPlayerIds.length > 0 && (
+                    <div>
+                      <strong style={{ color: '#60a5fa', display: 'block', marginBottom: '4px' }}>Bowling:</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {resAssign.bowlerPodPlayerIds.map(id => {
+                          const p = playerById.get(id);
+                          if (!p) return null;
+                          return (
+                            <div key={id} style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 700 }}>{p.name}</span>
+                              {onOpenQuickObservation && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onOpenQuickObservation(p); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--accent-gold)' }} title="Quick Note">
+                                  📝
+                                </button>
+                              )}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleQuickMarkAbsent(id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#ef4444' }} title="Mark Absent (Preserves Active Block Slot)">
+                                <UserMinus size={14} />
+                              </button>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleQuickMarkInjury(id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#eab308' }} title="Mark Injured">
+                                <AlertTriangle size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -328,8 +438,19 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
         <button
           className="btn btn-secondary"
           onClick={() => {
-            const nextRunning = !isTimerRunning;
-            setIsTimerRunning(nextRunning);
+            const now = new Date().toISOString();
+            if (isTimerRunning) {
+              setPausedAt(now);
+              setIsTimerRunning(false);
+              persistState({ ...session, currentLiveState: buildTimerState({ isPaused: true, pausedAt: now }) });
+            } else {
+              const pauseDurationSecs = pausedAt ? Math.floor((Date.now() - new Date(pausedAt).getTime()) / 1000) : 0;
+              const nextAccumulated = accumulatedPausedSeconds + pauseDurationSecs;
+              setAccumulatedPausedSeconds(nextAccumulated);
+              setPausedAt(null);
+              setIsTimerRunning(true);
+              persistState({ ...session, currentLiveState: buildTimerState({ isPaused: false, pausedAt: null, accumulatedPausedSeconds: nextAccumulated }) });
+            }
           }}
           style={{ flex: 1, height: '44px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >

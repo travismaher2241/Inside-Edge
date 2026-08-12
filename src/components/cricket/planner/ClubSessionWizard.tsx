@@ -8,14 +8,16 @@ import type {
   StaffPlayerAssignment,
   SavedClubTemplate,
   RollingFairnessLedger,
-  CentreWicketScenario
+  CentreWicketScenario,
+  GroupingStrategy
 } from '../../../types/cricket';
 import {
   calculateSessionFeasibility,
   generateClubRotationPlan
 } from '../../../modules/cricket/clubRotationEngine';
 import { CentreWicketScenarioBuilder } from './CentreWicketScenarioBuilder';
-import { AlertTriangle, Check, ChevronDown, ChevronUp, X, UserCheck } from 'lucide-react';
+import { RsvpInvitationService } from '../../../modules/cricket/rsvpInvitationService';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, X, UserCheck, Link, Copy } from 'lucide-react';
 
 interface ClubSessionWizardProps {
   teams: ClubTeam[];
@@ -51,6 +53,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(() => teams.filter(t => t.active !== false).map(t => t.id));
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>(() => resources.filter(r => r.active).map(r => r.id));
   const [rotationBlockMins, setRotationBlockMins] = useState<number>(12);
+  const defaultGroupingStrategy: GroupingStrategy = 'graded';
   const [sessionObjectives, setSessionObjectives] = useState<string[]>([
     'New-ball decision making',
     'T20 Middle overs scenario',
@@ -304,6 +307,10 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       rotationPlan: engineOutput.rotationBlocks,
       manualLocks,
       fairnessSettings: { targetEqualBattingMinutes: feasibilityResult.fairBattingMinutesPerPlayer },
+      defaultGroupingStrategy,
+      planningVersion: 1,
+      rsvps: {},
+      liveAttendance: {},
       blocks: engineOutput.rotationBlocks.map(block => ({
         id: block.blockId,
         title: `Rotation ${block.blockIndex + 1}`,
@@ -517,6 +524,20 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      const msg = RsvpInvitationService.getGenericGroupAnnouncement(
+                        { id: 'sess-temp', clubId: 'c1', title, date, startTime, finishTime, venueFacilityId, includedTeamIds: selectedTeamIds, availableResourceIds: selectedResourceIds, expectedPlayerIds: [], confirmedAttendingPlayerIds: [], availabilityRecords: {}, staffPlayerAssignments: {}, sessionObjectives, rotationDurationMinutes: rotationBlockMins, captainCoachAssignments: [], rotationPlan: [], manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 20 }, blocks: [], activeBlockIndex: 0, activeRotationIndex: 0, status: 'planned', warnings: [], planningVersion: 1, rsvps: {}, liveAttendance: {} },
+                        teams.find(t => selectedTeamIds.includes(t.id))
+                      );
+                      if (navigator.clipboard) void navigator.clipboard.writeText(msg);
+                      alert('Copied group WhatsApp announcement to clipboard! (Contains NO personal links).');
+                    }}
+                    style={{ width: 'auto', padding: '0 8px', height: '30px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Copy size={12} /> WhatsApp Group Notice
+                  </button>
                   <button className="btn btn-secondary" onClick={markAllAttending} style={{ width: 'auto', padding: '0 8px', height: '30px', fontSize: '0.72rem' }}>
                     Mark All Attending
                   </button>
@@ -543,6 +564,23 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={async () => {
+                            try {
+                              const link = await RsvpInvitationService.getShareableLink('sess-temp', p.id);
+                              if (navigator.clipboard) await navigator.clipboard.writeText(link);
+                              alert(`Copied 1-on-1 RSVP link for ${p.name}:\n${link}`);
+                            } catch (err: any) {
+                              alert(err.message || 'Error generating RSVP link.');
+                            }
+                          }}
+                          style={{ width: 'auto', padding: '0 6px', height: '28px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title={`Generate 1-on-1 RSVP link for ${p.name}`}
+                        >
+                          <Link size={12} /> Share Link
+                        </button>
                         <button
                           type="button"
                           className="btn btn-secondary"

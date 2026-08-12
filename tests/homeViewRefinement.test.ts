@@ -10,10 +10,10 @@ const mockPlayers: Player[] = [
 ];
 
 const mockFocuses: DevelopmentFocus[] = [
-  { id: 'f1', playerId: 'p1', domain: 'Bowling', focusStatement: 'Front foot alignment', state: 'Current Focus', targets: [], notes: '', createdAt: '2026-08-01', updatedAt: '2026-08-01' },
-  { id: 'f2', playerId: 'p2', domain: 'Batting', focusStatement: 'Decision-making outside off stump', state: 'Current Focus', targets: [], notes: '', createdAt: '2026-08-01', updatedAt: '2026-08-01' },
-  { id: 'f3', playerId: 'p3', domain: 'Spin Bowling', focusStatement: 'Flight and loop', state: 'Developing', targets: [], notes: '', createdAt: '2026-08-01', updatedAt: '2026-08-01' },
-  { id: 'f4', playerId: 'p4', domain: 'Fielding', focusStatement: 'High catching in deep', state: 'Current Focus', targets: [], notes: '', createdAt: '2026-08-01', updatedAt: '2026-08-01' }
+  { id: 'f1', playerId: 'p1', domain: 'Bowling', focusStatement: 'Front foot alignment', state: 'CURRENT', why: '', startDate: '2026-08-01', history: [], coachSummary: '', access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: false } },
+  { id: 'f2', playerId: 'p2', domain: 'Batting', focusStatement: 'Decision-making outside off stump', state: 'CURRENT', why: '', startDate: '2026-08-01', history: [], coachSummary: '', access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: false } },
+  { id: 'f3', playerId: 'p3', domain: 'Spin Bowling', focusStatement: 'Flight and loop', state: 'DEVELOPING', why: '', startDate: '2026-08-01', history: [], coachSummary: '', access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: false } },
+  { id: 'f4', playerId: 'p4', domain: 'Fielding', focusStatement: 'High catching in deep', state: 'CURRENT', why: '', startDate: '2026-08-01', history: [], coachSummary: '', access: { staffVisibility: 'all_coaches', shareWithPlayerGuardian: false } }
 ];
 
 describe('Home View Second-Pass UX Refinement Unit Tests', () => {
@@ -55,11 +55,12 @@ describe('Home View Second-Pass UX Refinement Unit Tests', () => {
       playerId: `p-${i}`,
       domain: 'Batting',
       focusStatement: `Focus ${i}`,
-      state: 'Current Focus' as const,
-      targets: [],
-      notes: '',
-      createdAt: '2026-08-01',
-      updatedAt: '2026-08-01'
+      state: 'CURRENT' as const,
+      why: '',
+      startDate: '2026-08-01',
+      history: [],
+      coachSummary: '',
+      access: { staffVisibility: 'all_coaches' as const, shareWithPlayerGuardian: false }
     }));
 
     const playersForFocus = Array.from({ length: 6 }, (_, i) => ({

@@ -12,7 +12,9 @@ import type {
   RollingFairnessLedger,
   SessionFairnessRecord,
   PriorityMatchup,
-  ClubTrainingSession
+  ClubTrainingSession,
+  GroupingStrategy,
+  PlayerTrainingProfile
 } from '../../types/cricket';
 import { buildBlockDurations } from './sessionModel';
 
@@ -39,6 +41,8 @@ export interface ClubRotationEngineOptions {
   manualLocks?: Record<string, boolean>;
   rollingFairnessLedger?: RollingFairnessLedger[];
   completedBlocks?: RotationBlockPlan[];
+  groupingStrategy?: GroupingStrategy;
+  playerTrainingProfiles?: Record<string, PlayerTrainingProfile>;
 }
 
 export interface ClubRotationEngineOutput {

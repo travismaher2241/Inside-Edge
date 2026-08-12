@@ -418,9 +418,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
             {[
               ['Setup', selectedActivity.setupSteps],
-              ['Coaching points', selectedActivity.coachingPoints],
-              ['Constraints', selectedActivity.constraints],
-              ['Progressions', selectedActivity.progressions],
+              ['Coaching Cues (3–5 Points)', selectedActivity.coachingPoints],
+              ['If Struggling (Simplification)', selectedActivity.structuredProgressions?.simplification || []],
+              ['If Succeeding (Progression)', selectedActivity.structuredProgressions?.advancement || selectedActivity.progressions || []],
+              ['Add Decision Making', selectedActivity.structuredProgressions?.decisionMaking || []],
+              ['Take into Game (Game Scenarios)', (selectedActivity.structuredProgressions?.gameScenarios || []).map(s => `${s.title}: ${s.description}`)],
               ['Equipment', selectedActivity.equipment],
               ['Safety', selectedActivity.safetyNotes ? [selectedActivity.safetyNotes] : []]
             ].map(([title, values]) => (

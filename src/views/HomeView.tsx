@@ -161,7 +161,7 @@ export const deriveHomeState = ({
   scopePlayers.forEach(p => {
     if (p.workloadRestriction?.restrictedBowler) {
       playersWithAttention.add(p.id);
-      const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
+      const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'));
       const focusText = playerFocuses.length > 0 ? ` · ${playerFocuses[0].domain}: ${playerFocuses[0].focusStatement}` : '';
       const limitText = p.workloadRestriction.maxDeliveries ? ` (${p.workloadRestriction.maxDeliveries} balls max)` : '';
 
@@ -195,7 +195,7 @@ export const deriveHomeState = ({
   const playerFocusItems: PlayerFocusItem[] = [];
   scopePlayers.forEach(p => {
     if (playersWithAttention.has(p.id)) return;
-    const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'));
+    const playerFocuses = focuses.filter(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'));
     if (playerFocuses.length > 0) {
       playerFocusItems.push({
         id: `pf-${p.id}`,
@@ -525,15 +525,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
           )}
 
           {/* Player Focus Items for Team */}
-          {scopePlayers.some(p => focuses.some(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))) && (
+          {scopePlayers.some(p => focuses.some(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))) && (
             <section className="home-section">
               <div className="home-section-header">
                 <span>PLAYER FOCUS</span>
                 <Sparkles size={14} color="var(--accent-gold)" />
               </div>
               <div className="home-insight-card">
-                {scopePlayers.filter(p => focuses.some(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))).slice(0, 3).map(p => {
-                  const pf = focuses.find(f => f.playerId === p.id && (f.state === 'Current Focus' || f.state === 'Developing'))!;
+                {scopePlayers.filter(p => focuses.some(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))).slice(0, 3).map(p => {
+                  const pf = focuses.find(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))!;
                   return (
                     <div key={p.id} className="home-insight-row green-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
                       <div className="home-insight-info">

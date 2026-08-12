@@ -16,12 +16,20 @@ interface FairnessReviewPanelProps {
 export interface PlayerFairnessStatus {
   player: Player;
   ledger?: RollingFairnessLedger;
-  status: 'BALANCED' | 'NEEDS OPPORTUNITY' | 'HIGH WORKLOAD';
+  status: 'BALANCED' | 'NEEDS OPPORTUNITY' | 'HIGH WORKLOAD' | 'INSUFFICIENT HISTORY';
   reason: string;
   battingMins: number;
   bowlingBalls: number;
   sessionsAttended: number;
   creditMins: number;
+  flags?: string[];
+  categoryDisplay?: {
+    batting: string;
+    bowling: string;
+    fielding: string;
+    centreWicket: string;
+    scenario: string;
+  };
 }
 
 export const deriveSquadBalanceData = (players: Player[], rollingLedger: RollingFairnessLedger[]) => {
@@ -31,17 +39,25 @@ export const deriveSquadBalanceData = (players: Player[], rollingLedger: Rolling
       return {
         player: p,
         status: isRestricted ? ('HIGH WORKLOAD' as const) : ('BALANCED' as const),
-        reason: isRestricted ? (p.workloadRestriction?.notes || 'Bowling workload restriction active') : 'No session history recorded yet',
+        reason: isRestricted ? (p.workloadRestriction?.notes || 'Bowling workload restriction active') : 'Insufficient session history recorded yet (< 2 sessions)',
         battingMins: 0,
         bowlingBalls: 0,
         sessionsAttended: 0,
-        creditMins: 0
+        creditMins: 0,
+        flags: ['insufficient_history'],
+        categoryDisplay: {
+          batting: 'Not enough history yet',
+          bowling: p.primaryRole === 'wicketkeeper' ? 'N/A' : 'Not enough history yet',
+          fielding: 'Not enough history yet',
+          centreWicket: 'Not enough history yet',
+          scenario: 'Not enough history yet'
+        }
       };
     });
     return {
       statuses,
-      needsAttention: statuses.filter(s => s.status !== 'BALANCED'),
-      balancedPlayers: statuses.filter(s => s.status === 'BALANCED')
+      needsAttention: statuses.filter(s => s.status === 'NEEDS OPPORTUNITY' || s.status === 'HIGH WORKLOAD'),
+      balancedPlayers: statuses.filter(s => s.status === 'BALANCED' || s.status === 'INSUFFICIENT HISTORY')
     };
   }
 

@@ -1,6 +1,6 @@
 // Development Domain Taxonomy & Constants for Cricket
 
-import type { DevelopmentDomain, FocusState, ObservationTag, PrimaryRole, BowlingStyle } from '../../types/cricket';
+import type { DevelopmentDomain, FocusLifecycleState, ObservationTag, PrimaryRole, BowlingStyle } from '../../types/cricket';
 
 export const DEVELOPMENT_DOMAINS: { domain: DevelopmentDomain; label: string; subAreas: string[] }[] = [
   {
@@ -89,12 +89,12 @@ export const DEVELOPMENT_DOMAINS: { domain: DevelopmentDomain; label: string; su
   }
 ];
 
-export const FOCUS_STATES: FocusState[] = [
-  'Current Focus',
-  'Developing',
-  'Consistent',
-  'Strength',
-  'Archived'
+export const FOCUS_STATES: FocusLifecycleState[] = [
+  'CURRENT',
+  'DEVELOPING',
+  'CONSISTENT',
+  'STRENGTH',
+  'ARCHIVED'
 ];
 
 export const OBSERVATION_TAGS: ObservationTag[] = [

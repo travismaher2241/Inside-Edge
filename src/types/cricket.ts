@@ -104,31 +104,145 @@ export type ObservationTag =
   | 'Workload' 
   | 'Custom Note';
 
-export interface Observation {
+export interface PlayerProgressAccessGrant {
   id: string;
   playerId: string;
-  timestamp: string; // ISO String
+  tokenHash: string; // SHA256(publicToken)
+  tokenVersion: number;
+  createdAt: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  publishedSummaryId?: string;
+}
+
+export interface ObservationAccess {
+  staffVisibility: 'all_coaches' | 'head_coach_only';
+  shareWithPlayerGuardian: boolean; // default false
+}
+
+export interface ObservationAttachment {
+  id: string;
+  observationId: string;
+  type: 'image' | 'video' | 'audio';
+  storagePath: string;
+  createdAt: string;
+  uploadedByUserId: string;
+  durationSeconds?: number;
+  mimeType?: string;
+  sizeBytes?: number;
+}
+
+export interface Observation {
+  id: string;
+  operationId: string;
+  playerId: string;
   source: 'training' | 'match';
-  tag: ObservationTag;
-  textNote: string;
-  focusId?: string; // Linked development focus
   sessionId?: string;
-  coachName?: string;
-  visibility?: 'all_coaches' | 'head_coach_only';
+  matchId?: string;
+  tags: ObservationTag[];
+  textNote: string;
+  linkedFocusIds: string[];
+  access: ObservationAccess;
+  attachments?: ObservationAttachment[];
+  createdAt: string;
+  createdByUserId: string;
+  updatedAt?: string;
+  baseRevision: number;
+  revision: number;
+  syncStatus?: 'synced' | 'pending';
+}
+
+export type FocusLifecycleState = 'CURRENT' | 'DEVELOPING' | 'CONSISTENT' | 'STRENGTH' | 'ARCHIVED';
+
+export interface FocusStateHistoryEntry {
+  fromState: FocusLifecycleState | null;
+  toState: FocusLifecycleState;
+  changedAt: string;
+  changedByUserId: string;
+  reason?: string;
 }
 
 export interface DevelopmentFocus {
   id: string;
   playerId: string;
   domain: DevelopmentDomain;
-  focusStatement: string; // e.g. "Decision-making outside off stump"
-  state: FocusState;
-  why: string; // e.g. "3 dismissals driving away from body in last match"
-  startDate: string; // ISO date
-  reviewDate: string; // ISO date
-  evidenceObservationIds: string[];
+  focusStatement: string;
+  objectiveId?: CoachingObjectiveId;
+  state: FocusLifecycleState;
+  why: string;
+  startDate: string;
+  reviewDate?: string;
+  achievedDate?: string;
+  archivedDate?: string;
+  history: FocusStateHistoryEntry[];
   coachSummary: string;
-  visibility?: 'all_coaches' | 'head_coach_only';
+  access: ObservationAccess;
+}
+
+export interface InternalPlayerDevelopmentSummary {
+  playerId: string;
+  generatedAt: string;
+  attendanceSummary: {
+    totalSessionsAttended: number;
+    battingMinutes: number;
+    bowlingMinutes: number;
+    fieldingMinutes: number;
+    centreWicketMinutes: number;
+  };
+  fairnessAssessment: PlayerFairnessAssessment;
+  allFocuses: DevelopmentFocus[];
+  allObservations: Observation[];
+  headCoachNotes?: string;
+}
+
+export interface PublishedFocusSummary {
+  focusStatement: string;
+  domain: DevelopmentDomain;
+  state: FocusLifecycleState;
+  evidenceCount: number;
+  summary: string;
+}
+
+export interface PublishedObservationExcerpt {
+  date: string;
+  tags: ObservationTag[];
+  excerpt: string;
+}
+
+export interface PublishedMediaReference {
+  attachmentId: string;
+  type: 'image' | 'video';
+}
+
+export interface PublishedPlayerProgressSummary {
+  id: string;
+  playerId: string;
+  version: number;
+  generatedAt: string;
+  publishedAt: string;
+  publishedByUserId: string;
+  supersedesSummaryId?: string;
+  reportingPeriod: {
+    startDate: string;
+    endDate: string;
+  };
+  fairnessWindowLabel?: string;
+  attendanceSummary: {
+    totalSessionsAttended: number;
+    battingMinutes: number;
+    bowlingMinutes: number;
+    fieldingMinutes: number;
+  };
+  fairnessSummary: {
+    isBalanced: boolean;
+    battingStatus: string;
+    bowlingStatus: string;
+    fieldingStatus: string;
+  };
+  focuses: PublishedFocusSummary[];
+  selectedEvidence: PublishedObservationExcerpt[];
+  mediaReferences?: PublishedMediaReference[];
+  nextSteps: string[];
 }
 
 export type CoachRole = 'head_coach' | 'assistant_coach';
@@ -155,10 +269,147 @@ export interface CoachInvite {
 }
 
 
+export type SkillTier = 'developing' | 'competent' | 'advanced' | 'performance';
+
+export interface TrainingSafetyProfile {
+  playerId: string;
+  canFacePace: boolean;
+  canFaceAdvancedPace: boolean;
+  canFaceSpin: boolean;
+  maxCompatiblePaceTier?: SkillTier;
+  coachRestrictions?: string[];
+}
+
+export interface PlayerTrainingProfile {
+  battingTier?: SkillTier;
+  paceBowlingTier?: SkillTier;
+  spinBowlingTier?: SkillTier;
+  primaryRole: 'batter' | 'bowler' | 'all_rounder' | 'wicketkeeper';
+  ageGroup?: string;
+  safetyProfile: TrainingSafetyProfile;
+}
+
+export interface PlayerSessionOpportunityRecord {
+  id: string;
+  sessionId: string;
+  teamId: string;
+  playerId: string;
+  completedAt: string;
+  attended: boolean;
+  totalActiveMinutes: number;
+  // Discipline Axis
+  battingMinutes: number;
+  bowlingMinutes: number;
+  fieldingMinutes: number;
+  // Context Axis
+  netMinutes: number;
+  centreWicketMinutes: number;
+  scenarioMinutes: number;
+  estimatedDeliveriesBowled?: number;
+  source: 'live_blocks' | 'manual_adjustment';
+}
+
+export type CategoryStatus =
+  | 'healthy'
+  | 'deficit'
+  | 'surplus'
+  | 'not_applicable'
+  | 'insufficient_evidence';
+
+export interface FairnessCategoryResult {
+  ratio: number | null; // null if not_applicable or insufficient_evidence
+  status: CategoryStatus;
+  evidenceSessionsCount: number;
+}
+
+export interface PlayerOpportunityProfile {
+  battingEligible: boolean;
+  bowlingEligible: boolean;
+  fieldingEligible: boolean;
+  wicketkeepingEligible: boolean;
+  battingTargetWeight: number;       // default 1.0
+  bowlingTargetWeight: number;       // default 1.0 (0.0 for keepers/non-bowlers)
+  fieldingTargetWeight: number;      // default 1.0
+  centreWicketTargetWeight: number;  // default 1.0
+  scenarioTargetWeight: number;      // default 1.0
+}
+
+export interface FairnessCategoryBalance {
+  batting: FairnessCategoryResult;
+  bowling: FairnessCategoryResult;
+  fielding: FairnessCategoryResult;
+  centreWicket: FairnessCategoryResult;
+  scenario: FairnessCategoryResult;
+}
+
+export type FairnessFlag =
+  | 'needs_batting'
+  | 'needs_bowling'
+  | 'needs_fielding'
+  | 'low_centre_wicket'
+  | 'high_scenario'
+  | 'insufficient_history';
+
+export interface PlayerFairnessAssessment {
+  playerId: string;
+  isBalanced: boolean;
+  hasInsufficientHistory: boolean;
+  flags: FairnessFlag[];
+  balance: FairnessCategoryBalance;
+  opportunityProfile: PlayerOpportunityProfile;
+}
+
+export interface ActivityUsageRecord {
+  id: string;
+  activityId: string;
+  teamId: string;
+  seasonId: string;
+  sessionId: string;
+  plannedAt?: string;
+  completedAt: string;
+  actualDurationMinutes?: number;
+  selectedProgressionStage?: ActivityProgressionStage;
+}
+
+export type CoachingObjectiveId = string;
+
+export interface CoachingObjective {
+  id: CoachingObjectiveId;
+  name: string;
+  domain: DevelopmentDomain;
+  parentObjectiveId?: CoachingObjectiveId;
+  applicableRoles?: string[];
+  aliases?: string[];
+}
+
+export type ActivityProgressionStage =
+  | 'base'
+  | 'simplified'
+  | 'progressed'
+  | 'decision_making'
+  | 'game_transfer';
+
+export interface ActivityGameScenario {
+  id: string;
+  title: string;
+  targetRuns?: number;
+  targetBalls?: number;
+  wickets?: number;
+  description: string;
+}
+
+export interface ActivityProgressionDetails {
+  simplification: string[];
+  advancement: string[];
+  decisionMaking: string[];
+  gameScenarios: ActivityGameScenario[];
+}
+
 export interface Activity {
   id: string;
   name: string;
   purpose: string; // Problem it addresses, e.g. "Playing seam bowling under pressure"
+  objectiveIds?: CoachingObjectiveId[];
   category: DevelopmentDomain;
   minPlayers: number;
   maxPlayers: number;
@@ -169,9 +420,19 @@ export interface Activity {
   coachingPoints: string[];
   constraints: string[];
   progressions: string[];
+  structuredProgressions?: ActivityProgressionDetails;
   safetyNotes?: string;
   participationDensity: 'High' | 'Medium' | 'Low';
   tags: string[];
+}
+
+export type GroupingStrategy = 'graded' | 'mixed';
+
+export interface SessionActivityInstance {
+  activityId: string;
+  selectedProgressionStage: ActivityProgressionStage;
+  durationMinutes: number;
+  coachNotes?: string;
 }
 
 export interface LaneAssignment {
@@ -460,15 +721,9 @@ export interface ClubSessionBlock {
   objective: string;
   location?: string;
   activityId?: string;
+  activityInstance?: SessionActivityInstance;
+  groupingStrategyOverride?: GroupingStrategy;
   rotation?: RotationBlockPlan;
-}
-
-export interface LiveSessionState {
-  activeBlockIndex: number;
-  activeRotationIndex: number;
-  secondsRemaining: number;
-  isPaused: boolean;
-  updatedAt: string;
 }
 
 export interface ClubTrainingSession {
@@ -491,6 +746,7 @@ export interface ClubTrainingSession {
   rotationPlan: RotationBlockPlan[];
   manualLocks: Record<string, boolean>; // e.g. `${blockIndex}_${resourceId}_${playerId}`
   fairnessSettings: { targetEqualBattingMinutes: number };
+  defaultGroupingStrategy?: GroupingStrategy;
   blocks: ClubSessionBlock[];
   activeBlockIndex: number;
   activeRotationIndex: number;
@@ -499,8 +755,80 @@ export interface ClubTrainingSession {
   rationale?: string;
   completedAt?: string;
   fairnessAppliedAt?: string;
-  currentLiveState?: LiveSessionState;
+  planningVersion: number;
+  rsvpOpenAt?: string;
+  rsvpDeadline?: string;
+  rsvpClosedAt?: string;
+  rsvps: Record<string, PlayerRsvp>;
+  liveAttendance: Record<string, PlayerLiveAttendance>;
+  currentLiveState?: LiveTimerState;
   actualParticipationOutcomes?: Record<string, { battingMinutes: number; deliveriesBowled: number; centreWicketOvers: number }>;
+}
+
+export interface RsvpInvitation {
+  id: string;
+  sessionId: string;
+  playerId: string;
+  tokenVersion: number;
+  tokenHash: string; // SHA256(publicToken)
+  createdAt: string;
+  expiresAt: string;
+  revokedAt?: string | null;
+  lastUsedAt?: string;
+}
+
+export type RsvpStatus = 'confirmed' | 'unavailable' | 'late' | 'leaving_early' | 'partial' | 'unknown';
+export type LiveAttendanceStatus = 'expected' | 'present' | 'live_absent' | 'injured' | 'left_early';
+
+export interface PlayerRsvp {
+  playerId: string;
+  status: RsvpStatus;
+  availableFrom?: string; // e.g. "17:30"
+  availableUntil?: string; // e.g. "18:15"
+  parentNote?: string;
+  submittedAt?: string;
+  updatedAt?: string;
+  revision: number;
+}
+
+export interface PlayerRsvpSubmissionPayload {
+  playerId: string;
+  status: RsvpStatus;
+  availableFrom?: string;
+  availableUntil?: string;
+  parentNote?: string;
+  baseRevision: number;
+  submissionId: string;
+}
+
+export interface PlayerLiveAttendance {
+  playerId: string;
+  status: LiveAttendanceStatus;
+  actualArrivedAt?: string;
+  actualLeftAt?: string;
+  injuryNotes?: string;
+  changedBy?: string;
+  changedAt?: string;
+}
+
+export interface LiveTimerState {
+  rotationStartedAt: string | null;
+  rotationDurationSeconds: number;
+  pausedAt: string | null;
+  accumulatedPausedSeconds: number;
+  isPaused: boolean;
+  activeBlockIndex: number;
+  activeRotationIndex: number;
+  updatedAt: string;
+}
+
+export interface LiveOperationLog {
+  operationId: string;
+  type: 'PLAYER_MARKED_ABSENT' | 'PLAYER_INJURED' | 'PLAYER_SWAPPED' | 'ROTATION_ADVANCED' | 'RECALCULATION_APPLIED' | 'OBSERVATION_CREATED';
+  playerId?: string;
+  details?: Record<string, any>;
+  occurredAt: string;
+  deviceId: string;
 }
 
 export interface SessionFairnessRecord {
