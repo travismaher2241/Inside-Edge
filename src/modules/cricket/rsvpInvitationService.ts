@@ -55,7 +55,6 @@ async function fetchInvitationByHash(tokenHash: string): Promise<RsvpInvitation 
         saveLocalInvitation(inv); // cache locally for offline access on this device
         return inv;
       }
-      return null;
     } catch (err) {
       console.warn('Firestore RSVP invitation lookup failed, falling back to local cache:', err);
     }

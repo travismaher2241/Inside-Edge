@@ -3,6 +3,7 @@
 import {
   doc,
   setDoc,
+  getDoc,
   collection,
   onSnapshot,
   getDocs,
@@ -144,6 +145,10 @@ export const CloudStorageEngine = {
   updatePlayer: async (player: Player): Promise<void> => {
     await setDoc(doc(db, 'players', player.id), player);
   },
+  getPlayer: async (playerId: string): Promise<Player | null> => {
+    const snap = await getDoc(doc(db, 'players', playerId));
+    return snap.exists() ? (snap.data() as Player) : null;
+  },
 
   // Activities
   subscribeToActivities: (callback: (activities: Activity[]) => void): (() => void) => {
@@ -234,6 +239,10 @@ export const CloudStorageEngine = {
   saveClubTeam: async (team: ClubTeam): Promise<void> => {
     await setDoc(doc(db, 'clubTeams', team.id), team);
   },
+  getClubTeams: async (): Promise<ClubTeam[]> => {
+    const snap = await getDocs(collection(db, 'clubTeams'));
+    return snap.empty ? SEED_CLUB_TEAMS : snap.docs.map(item => item.data() as ClubTeam);
+  },
 
   subscribeToTrainingResources: (callback: (resources: TrainingResource[]) => void): (() => void) =>
     onSnapshot(collection(db, 'trainingResources'), snap => callback(snap.empty ? SEED_TRAINING_RESOURCES : snap.docs.map(item => item.data() as TrainingResource))),
@@ -245,6 +254,10 @@ export const CloudStorageEngine = {
     onSnapshot(collection(db, 'clubTrainingSessions'), snap => callback(snap.docs.map(item => item.data() as ClubTrainingSession))),
   saveClubSession: async (session: ClubTrainingSession): Promise<void> => {
     await setDoc(doc(db, 'clubTrainingSessions', session.id), session);
+  },
+  getClubSession: async (sessionId: string): Promise<ClubTrainingSession | null> => {
+    const snap = await getDoc(doc(db, 'clubTrainingSessions', sessionId));
+    return snap.exists() ? (snap.data() as ClubTrainingSession) : null;
   },
 
   subscribeToFairnessLedger: (callback: (ledger: RollingFairnessLedger[]) => void): (() => void) =>

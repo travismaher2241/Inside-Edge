@@ -1,7 +1,9 @@
 // Unauthenticated Public RSVP Service for Inside Edge
 // Handles public token verification, availability submission with baseRevision checks, and offline outbox retries.
 
-import type { PlayerRsvp, PlayerRsvpSubmissionPayload, ClubTrainingSession, Player } from '../../types/cricket';
+import type { PlayerRsvp, PlayerRsvpSubmissionPayload, ClubTrainingSession, Player, ClubTeam } from '../../types/cricket';
+import { isFirebaseConfigured } from '../../lib/firebase';
+import { CloudStorageEngine } from './cloudStorageEngine';
 import { StorageEngine } from '../../storage/db';
 import { IndexedDbJournal } from '../../storage/indexedDbJournal';
 import { RsvpInvitationService } from './rsvpInvitationService';
@@ -28,6 +30,56 @@ export interface RsvpSubmitResult {
 
 const processedSubmissionIds = new Set<string>();
 
+// Session/player/team data lives in Firestore (via CloudStorageEngine) for the
+// live app; StorageEngine (localStorage) is kept only as the offline/no-Firebase
+// fallback, matching the pattern used elsewhere (matchReportService, authService).
+async function resolveSession(sessionId: string): Promise<ClubTrainingSession | undefined> {
+  if (isFirebaseConfigured) {
+    try {
+      const session = await CloudStorageEngine.getClubSession(sessionId);
+      if (session) return session;
+    } catch (err) {
+      console.warn('Firestore session lookup failed, falling back to local storage:', err);
+    }
+  }
+  return StorageEngine.getClubSessions().find(s => s.id === sessionId);
+}
+
+async function resolvePlayer(playerId: string): Promise<Player | undefined> {
+  if (isFirebaseConfigured) {
+    try {
+      const player = await CloudStorageEngine.getPlayer(playerId);
+      if (player) return player;
+    } catch (err) {
+      console.warn('Firestore player lookup failed, falling back to local storage:', err);
+    }
+  }
+  return StorageEngine.getPlayers().find(p => p.id === playerId);
+}
+
+async function resolveClubTeams(): Promise<ClubTeam[]> {
+  if (isFirebaseConfigured) {
+    try {
+      return await CloudStorageEngine.getClubTeams();
+    } catch (err) {
+      console.warn('Firestore club teams lookup failed, falling back to local storage:', err);
+    }
+  }
+  return StorageEngine.getClubTeams();
+}
+
+async function persistSession(session: ClubTrainingSession): Promise<void> {
+  if (isFirebaseConfigured) {
+    try {
+      await CloudStorageEngine.saveClubSession(session);
+      return;
+    } catch (err) {
+      console.warn('Firestore session save failed, falling back to local storage:', err);
+    }
+  }
+  StorageEngine.saveClubSession(session);
+}
+
 export const PublicRsvpService = {
   /**
    * Fetches public RSVP details for a supplied public token without requiring coach auth.
@@ -39,11 +91,13 @@ export const PublicRsvpService = {
     if (verification.status !== 'valid') return null;
 
     const { sessionId, playerId } = verification.invitation;
-    const session = StorageEngine.getClubSessions().find(s => s.id === sessionId);
-    const player = StorageEngine.getPlayers().find(p => p.id === playerId);
+    const [session, player, clubTeams] = await Promise.all([
+      resolveSession(sessionId),
+      resolvePlayer(playerId),
+      resolveClubTeams()
+    ]);
     if (!session || !player) return null;
 
-    const clubTeams = StorageEngine.getClubTeams();
     const team = clubTeams.find(t => session.includedTeamIds.includes(t.id)) || clubTeams[0];
     const existingRsvp = session.rsvps?.[player.id];
 
@@ -113,7 +167,7 @@ export const PublicRsvpService = {
     }
 
     // Server-side / local engine write with transactional baseRevision validation
-    const session = StorageEngine.getClubSessions().find(s => s.id === verification.invitation.sessionId);
+    const session = await resolveSession(verification.invitation.sessionId);
 
     if (!session) {
       return { success: false, status: 'expired', message: 'Session not found or expired.' };
@@ -151,7 +205,7 @@ export const PublicRsvpService = {
       }
     };
 
-    StorageEngine.saveClubSession(updatedSession);
+    await persistSession(updatedSession);
     processedSubmissionIds.add(submissionId);
 
     return {
