@@ -65,6 +65,45 @@ export interface MatchDaySummary {
   keyConditions: Array<{ title: string; interpretation: string; category: RuleCategory }>;
 }
 
+/**
+ * Scans approved fielding/powerplay rules for the powerplay overs range and the max
+ * fielders permitted outside the circle. Extractor normalization can only capture one
+ * number per rule line, so a single "1 to 10 overs, max 2 fielders" clause can end up
+ * split across two separate rules (or lose one fact into structuredValue's text
+ * fallback) — reading straight from each rule's interpretation text is more robust
+ * than trusting whichever number normalizeStructuredValue happened to pick up.
+ */
+function extractPowerplayFacts(rules: CompetitionRule[]): { oversLabel?: string; maxOutsideCircle?: number } {
+  const powerplayRules = rules.filter(r => r.category === 'fielding' && r.title.toLowerCase().includes('powerplay'));
+
+  let oversLabel: string | undefined;
+  let maxOutsideCircle: number | undefined;
+
+  for (const rule of powerplayRules) {
+    const text = rule.approvedInterpretation || rule.rawInterpretation || '';
+
+    if (oversLabel === undefined) {
+      const oversMatch = text.match(/overs?\s*(\d+)\s*(?:to|-)\s*(\d+)/i);
+      if (oversMatch) {
+        oversLabel = `Overs ${oversMatch[1]}-${oversMatch[2]}`;
+      } else if (rule.structuredValue?.kind === 'range' && rule.structuredValue.min !== undefined && rule.structuredValue.max !== undefined) {
+        oversLabel = `Overs ${rule.structuredValue.min}-${rule.structuredValue.max}`;
+      }
+    }
+
+    if (maxOutsideCircle === undefined) {
+      const fielderMatch = text.match(/(\d+)\s+fielders?/i);
+      if (fielderMatch) {
+        maxOutsideCircle = parseInt(fielderMatch[1], 10);
+      } else if (rule.structuredValue?.kind === 'number' && rule.structuredValue.unit?.toLowerCase().includes('field')) {
+        maxOutsideCircle = rule.structuredValue.value;
+      }
+    }
+  }
+
+  return { oversLabel, maxOutsideCircle };
+}
+
 export const RulesService = {
   /**
    * Resolves only active, approved, applicable rules for a given coaching context.
@@ -175,6 +214,8 @@ export const RulesService = {
       maxOvers = maxBowlerRule.structuredValue.value;
     }
 
+    const powerplayFacts = extractPowerplayFacts(rules);
+
     return {
       hasActiveRules: true,
       ruleSetId: ruleSet.id,
@@ -185,8 +226,8 @@ export const RulesService = {
       season: ruleSet.season,
       matchFormat: matchFormatRule?.approvedInterpretation || matchFormatRule?.rawInterpretation || 'Standard Match Format',
       maxOversPerBowler: maxOvers || 8,
-      powerplayOvers: 'Overs 1-10',
-      maxOutsideCircleInPowerplay: 2,
+      powerplayOvers: powerplayFacts.oversLabel || 'Overs 1-10',
+      maxOutsideCircleInPowerplay: powerplayFacts.maxOutsideCircle ?? 2,
       inningsBreakMinutes: 20,
       keyConditions: rules.slice(0, 5).map(r => ({
         title: r.title,
@@ -293,7 +334,7 @@ export const RulesService = {
     const rules = RulesService.getApplicableRules(context);
     const powerplayRule = rules.find(r => r.category === 'fielding' && r.title.toLowerCase().includes('powerplay'));
 
-    const maxAllowed = 2; // Powerplay max outside circle
+    const maxAllowed = extractPowerplayFacts(rules).maxOutsideCircle ?? 2;
 
     if (matchPhase.toLowerCase().includes('powerplay') && outsideCircleCount > maxAllowed) {
       const doc = powerplayRule ? DocumentService.getDocument(powerplayRule.sourceDocumentId) : undefined;
