@@ -96,9 +96,14 @@ export const IndexedDbJournal = {
     }
   },
 
-  // Operation Journal Logging
+  // Operation Journal Logging & Outbox Sync
   appendOperation: async (sessionId: string, log: LiveOperationLog): Promise<void> => {
-    const entry = { ...log, sessionId };
+    const entry = {
+      ...log,
+      sessionId,
+      syncStatus: (log as any).syncStatus || 'PENDING',
+      retryCount: 0
+    };
     try {
       const db = await openDatabase();
       await new Promise<void>((resolve, reject) => {
@@ -109,6 +114,59 @@ export const IndexedDbJournal = {
       });
     } catch {
       memoryDb.operationLogs.set(log.operationId, entry);
+    }
+  },
+
+  getPendingOperationLogs: async (): Promise<Array<LiveOperationLog & { sessionId: string; syncStatus?: string; retryCount?: number }>> => {
+    try {
+      const db = await openDatabase();
+      return await new Promise<any[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.OPERATION_LOGS, 'readonly');
+        const req = tx.objectStore(STORES.OPERATION_LOGS).getAll();
+        req.onsuccess = () => {
+          const list = req.result || [];
+          resolve(list.filter((item: any) => !item.syncStatus || item.syncStatus === 'PENDING' || item.syncStatus === 'FAILED_RETRYABLE'));
+        };
+        req.onerror = () => reject(req.error);
+      });
+    } catch {
+      return Array.from(memoryDb.operationLogs.values()).filter(
+        (item: any) => !item.syncStatus || item.syncStatus === 'PENDING' || item.syncStatus === 'FAILED_RETRYABLE'
+      );
+    }
+  },
+
+  updateOperationSyncStatus: async (operationId: string, status: 'PENDING' | 'SYNCING' | 'SYNCED' | 'FAILED_RETRYABLE' | 'FAILED_PERMANENT', error?: string): Promise<void> => {
+    try {
+      const db = await openDatabase();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.OPERATION_LOGS, 'readwrite');
+        const store = tx.objectStore(STORES.OPERATION_LOGS);
+        const req = store.get(operationId);
+        req.onsuccess = () => {
+          if (req.result) {
+            const updated = {
+              ...req.result,
+              syncStatus: status,
+              lastAttemptAt: new Date().toISOString(),
+              retryCount: (req.result.retryCount || 0) + (status.startsWith('FAILED') ? 1 : 0),
+              error
+            };
+            store.put(updated);
+          }
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      });
+    } catch {
+      const existing = memoryDb.operationLogs.get(operationId);
+      if (existing) {
+        memoryDb.operationLogs.set(operationId, {
+          ...existing,
+          syncStatus: status,
+          error
+        } as any);
+      }
     }
   },
 

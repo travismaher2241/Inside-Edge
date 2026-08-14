@@ -350,27 +350,39 @@ export const MatchView: React.FC<MatchViewProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>
-                      {workflowStatus.completedCount === 4 ? 'MATCH READY' : 'MATCH PREP'}
+                      {isCompleted
+                        ? (currentMatch.postMatchReview ? 'MATCH REVIEWED' : 'MATCH COMPLETED')
+                        : (workflowStatus.completedCount === 4 ? 'MATCH READY' : 'MATCH PREP')}
                     </h3>
-                    <div style={{ fontSize: '0.78rem', color: workflowStatus.completedCount === 4 ? '#4ade80' : 'var(--text-secondary)', marginTop: '2px', fontWeight: 700 }}>
-                      {workflowStatus.completedCount} of 4 {workflowStatus.completedCount === 4 ? 'complete' : 'ready'}
+                    <div style={{ fontSize: '0.78rem', color: isCompleted ? '#4ade80' : (workflowStatus.completedCount === 4 ? '#4ade80' : 'var(--text-secondary)'), marginTop: '2px', fontWeight: 700 }}>
+                      {isCompleted
+                        ? (currentMatch.result ? `Result: ${currentMatch.result}` : 'Fixture completed')
+                        : `${workflowStatus.completedCount} of 4 ${workflowStatus.completedCount === 4 ? 'complete' : 'ready'}`}
                     </div>
                   </div>
                   <button 
                     className="btn btn-secondary" 
-                    onClick={() => setIsPrepWizardOpen(true)}
+                    onClick={() => {
+                      if (isCompleted) {
+                        setActiveSection(currentMatch.postMatchReview ? 'review' : 'plan');
+                      } else {
+                        setIsPrepWizardOpen(true);
+                      }
+                    }}
                     style={{ width: 'auto', padding: '0 12px', height: '34px', fontSize: '0.75rem' }}
                   >
-                    {workflowStatus.completedCount === 4 ? 'View Game Plan' : 'Continue Preparation'} <ArrowRight size={14} />
+                    {isCompleted
+                      ? (currentMatch.postMatchReview ? 'View Review' : 'View Game Plan')
+                      : (workflowStatus.completedCount === 4 ? 'View Game Plan' : 'Continue Preparation')} <ArrowRight size={14} />
                   </button>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
                   {[
-                    { label: 'Squad', complete: workflowStatus.squad, stage: 1 },
-                    { label: 'Opponent', complete: workflowStatus.opposition, stage: 2 },
-                    { label: 'Conditions', complete: workflowStatus.conditions, stage: 3 },
-                    { label: 'Game Plan', complete: workflowStatus.plans, stage: 4 }
+                    { label: 'Squad', complete: isCompleted || workflowStatus.squad, stage: 1 },
+                    { label: 'Opponent', complete: isCompleted || workflowStatus.opposition, stage: 2 },
+                    { label: 'Conditions', complete: isCompleted || workflowStatus.conditions, stage: 3 },
+                    { label: 'Game Plan', complete: isCompleted || workflowStatus.plans, stage: 4 }
                   ].map(item => (
                     <div
                       key={item.label}

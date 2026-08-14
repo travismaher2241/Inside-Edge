@@ -1143,6 +1143,45 @@ input[type='checkbox'], input[type='radio'] { width: 20px; min-height: 20px; mar
   border-color: var(--border-gold);
 }
 
+/* Library Phase 2B Mobile Field-Use Hardening & Touch Utilities */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+}
+
+.touch-canvas-containment {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.outdoor-contrast {
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+@media (max-width: 640px) {
+  .responsive-table-to-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .responsive-table-to-cards table,
+  .responsive-table-to-cards thead,
+  .responsive-table-to-cards tbody,
+  .responsive-table-to-cards th,
+  .responsive-table-to-cards td,
+  .responsive-table-to-cards tr {
+    display: block;
+  }
+
+  .responsive-table-to-cards thead {
+    display: none;
+  }
+}
+
 /* Library View Mobile Redesign Styles */
 .library-filter-chips-row {
   display: flex;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Observation, ObservationTag, DevelopmentFocus, Player } from '../../../types/cricket';
 import { IndexedDbJournal } from '../../../storage/indexedDbJournal';
+import { SyncOutboxEngine } from '../../../modules/cricket/syncOutboxEngine';
 import { uploadObservationClip, MediaUploadError } from '../../../modules/cricket/mediaStorageEngine';
 import { Mic, MicOff, X, Save, Video, Paperclip, Loader2 } from 'lucide-react';
 
@@ -135,6 +136,9 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
       occurredAt: new Date().toISOString(),
       deviceId: 'dev_local'
     });
+
+    // Attempt to flush pending outbox operations if online (guarded internally by test mode)
+    void SyncOutboxEngine.processPendingOperations();
 
     onSaved?.(newObservation);
 

@@ -259,7 +259,7 @@ export const TrainingTemplateManager: React.FC<TrainingTemplateManagerProps> = (
               {/* Compact Metadata Pills */}
               <div className="template-pills-row">
                 <span className="template-pill">{template.rotationDurationMinutes} min rotation</span>
-                {ruleCount > 0 && <span className="template-pill">{ruleCount} resource rules</span>}
+                {ruleCount > 0 && <span className="template-pill">{ruleCount} resource {ruleCount === 1 ? 'rule' : 'rules'}</span>}
                 <button 
                   onClick={() => setExpandedId(isExpanded ? null : template.id)}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '2px', cursor: 'pointer', marginLeft: 'auto' }}

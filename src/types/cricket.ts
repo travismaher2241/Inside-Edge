@@ -375,12 +375,95 @@ export type CoachingObjectiveId = string;
 
 export interface CoachingObjective {
   id: CoachingObjectiveId;
-  name: string;
+  sport: 'cricket';
   domain: DevelopmentDomain;
+  name: string;
+  shortDescription: string;
+  detailedDescription?: string;
+
+  ageGroups: string[];
+  formats: string[];
+
+  relatedDevelopmentAreas: string[];
+  relatedActivityIds: string[];
+  relatedScenarioTypes: string[];
+  matchIssueTriggers: string[];
+
+  facilityRequirements: string[];
+  equipmentRequirements: string[];
+
+  playerRoleRelevance: string[];
+  skillLevelRange?: ('Beginner' | 'Intermediate' | 'Advanced')[];
+
+  coachingPrinciples: string[];
+  successIndicators: string[];
+
+  tags: string[];
+
+  status: 'active' | 'draft' | 'deprecated';
+  version: number;
+
   parentObjectiveId?: CoachingObjectiveId;
   applicableRoles?: string[];
   aliases?: string[];
 }
+
+export type RecommendationType =
+  | 'smart_planner'
+  | 'match_to_training'
+  | 'player_development'
+  | 'coach_assistant'
+  | 'league_rule';
+
+export type RecommendationDecisionStatus =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+  | 'edited';
+
+export interface RecommendationRecord {
+  id: string;
+  type: RecommendationType;
+
+  clubId: string;
+  teamId: string;
+
+  playerIds?: string[];
+
+  createdAt: string;
+  createdBy: string;
+
+  inputContext: Record<string, unknown>;
+
+  recommendation: Record<string, unknown>;
+
+  rationale: {
+    teamRationale?: string;
+    activityRationale?: string;
+
+    playerRationale?: Array<{
+      playerId: string;
+      reason: string;
+    }>;
+
+    ruleTraceability?: Array<{
+      ruleId: string;
+      citation: string;
+    }>;
+  };
+
+  sourceIds: string[];
+  ruleIds: string[];
+
+  decisionStatus: RecommendationDecisionStatus;
+
+  originalRecommendation: Record<string, unknown>;
+  finalCoachDecision?: Record<string, unknown>;
+
+  relatedSessionId?: string;
+  relatedMatchId?: string;
+}
+
 
 export type ActivityProgressionStage =
   | 'base'
@@ -501,11 +584,26 @@ export interface MatchObservation {
 
 export interface MatchRecord {
   id: string;
+  teamId?: string;
   opponent: string;
   date: string;
   venue: string;
   format: 'T20' | 'One Day (40/50 Overs)' | 'Two Day' | 'Junior 20 Overs';
   result?: string;
+  ruleSetId?: string;
+  ruleSetVersion?: number;
+  appliedRulesSnapshot?: {
+    capturedAt: string;
+    rules: Array<{
+      ruleId: string;
+      category: string;
+      title: string;
+      approvedInterpretation: string;
+      sourceDocumentName: string;
+      sourcePage: number;
+      sourceSection?: string;
+    }>;
+  };
   preMatchPlan: {
     teamObjectives: string[];
     battingNotes: string;

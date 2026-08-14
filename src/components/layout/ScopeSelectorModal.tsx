@@ -8,6 +8,7 @@ interface ScopeSelectorModalProps {
   totalPlayersCount: number;
   onSelectScope: (scope: ActiveScope) => void;
   onClose: () => void;
+  onOpenOnboarding?: () => void;
 }
 
 export const ScopeSelectorModal: React.FC<ScopeSelectorModalProps> = ({
@@ -16,6 +17,7 @@ export const ScopeSelectorModal: React.FC<ScopeSelectorModalProps> = ({
   totalPlayersCount,
   onSelectScope,
   onClose,
+  onOpenOnboarding
 }) => {
   return (
     <div className="bottom-sheet-overlay" onClick={onClose}>
@@ -77,8 +79,21 @@ export const ScopeSelectorModal: React.FC<ScopeSelectorModalProps> = ({
 
         {/* Teams Scope Section */}
         <div>
-          <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-            TEAMS CONTEXT
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              TEAMS CONTEXT
+            </div>
+            {onOpenOnboarding && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenOnboarding();
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                + Add Team Setup
+              </button>
+            )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
             {teams.map(t => {

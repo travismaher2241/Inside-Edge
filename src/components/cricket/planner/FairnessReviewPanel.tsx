@@ -244,7 +244,7 @@ export const FairnessReviewPanel: React.FC<FairnessReviewPanelProps> = ({
             <div className="home-section-header">
               <span>NEEDS ATTENTION</span>
               {needsAttention.length > 0 && (
-                <span style={{ color: '#f97316', fontWeight: 800 }}>{needsAttention.length} players</span>
+                <span style={{ color: '#f97316', fontWeight: 800 }}>{needsAttention.length} {needsAttention.length === 1 ? 'PLAYER' : 'PLAYERS'}</span>
               )}
             </div>
 

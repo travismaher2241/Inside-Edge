@@ -464,6 +464,10 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
                   alignItems: 'center',
                   cursor: 'grab',
                   touchAction: 'none',
+                  padding: '10px',
+                  minWidth: '44px',
+                  minHeight: '44px',
+                  justifyContent: 'center',
                   zIndex: isDragging || isSelected ? 10 : 2
                 }}
               >

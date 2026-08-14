@@ -26,6 +26,12 @@ import { CoachAssistantPanel } from './components/cricket/CoachAssistantPanel';
 import { LiveClubSession } from './components/cricket/planner/LiveClubSession';
 import { activityToClubBlock, selectCurrentClubSession } from './modules/cricket/sessionModel';
 import { completeSessionWithFairness } from './modules/cricket/clubRotationEngine';
+import { SyncOutboxEngine } from './modules/cricket/syncOutboxEngine';
+import { RulesManagementView } from './components/cricket/rules/RulesManagementView';
+import { ClubSetupWizard } from './components/onboarding/ClubSetupWizard';
+import { ReportProblemModal } from './components/diagnostics/ReportProblemModal';
+import { DataExportService } from './modules/export/dataExportService';
+import { PermissionMatrix } from './modules/permissions/permissionMatrix';
 import { SEED_TEAM, SEED_PLAYERS, SEED_ACTIVITIES, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const PublicRsvpView = lazy(() => import('./views/PublicRsvpView').then(m => ({ default: m.PublicRsvpView })));
@@ -47,6 +53,9 @@ export function App() {
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isCoachManagerOpen, setIsCoachManagerOpen] = useState<boolean>(false);
   const [isCoachAssistantOpen, setIsCoachAssistantOpen] = useState<boolean>(false);
+  const [isRulesManagementOpen, setIsRulesManagementOpen] = useState<boolean>(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isReportProblemOpen, setIsReportProblemOpen] = useState<boolean>(false);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const effectiveCoachProfile = isTestMode ? TEST_ACCESS_COACH : coachProfile;
 
@@ -76,6 +85,15 @@ export function App() {
 
   // Quick Observation Drawer State
   const [observedPlayer, setObservedPlayer] = useState<Player | null>(null);
+
+  // Auto-Sync Listener (Guarded against test mode)
+  useEffect(() => {
+    SyncOutboxEngine.setTestMode(isTestMode);
+    if (isTestMode || !authUser) return;
+
+    const cleanup = SyncOutboxEngine.initAutoSyncListener();
+    return () => cleanup();
+  }, [isTestMode, authUser]);
 
   // 1. Listen to Firebase Auth state
   useEffect(() => {
@@ -150,14 +168,22 @@ export function App() {
     [clubSessions, currentClubSessionId]
   );
 
+  // Compute team-scoped or club-wide matches based on activeScope
+  const filteredMatches = useMemo<MatchRecord[]>(() => {
+    if (activeScope.mode === 'team') {
+      return matches.filter(m => m.teamId === activeScope.teamId || (!m.teamId && activeScope.teamId === 'ct-1'));
+    }
+    return matches;
+  }, [matches, activeScope]);
+
   // Compute current active match for HomeView and default MatchView selection
   const activeMatch = useMemo<MatchRecord>(() => {
     if (selectedMatchId) {
-      const target = matches.find(m => m.id === selectedMatchId);
+      const target = filteredMatches.find(m => m.id === selectedMatchId);
       if (target) return target;
     }
-    return getActiveMatch(matches) || matches[0];
-  }, [matches, selectedMatchId]);
+    return getActiveMatch(filteredMatches) || filteredMatches[0];
+  }, [filteredMatches, selectedMatchId]);
 
   // Save Handlers (Persisted to Firestore via CloudStorageEngine, or kept local-only in Test Access mode)
   const handleSaveObservation = (observation: Observation) => {
@@ -169,12 +195,35 @@ export function App() {
   };
 
   const handleAddMatch = (newMatch: MatchRecord) => {
+    const matchWithTeam: MatchRecord = {
+      ...newMatch,
+      teamId: newMatch.teamId || (activeScope.mode === 'team' ? activeScope.teamId : 'ct-1')
+    };
     if (isTestMode) {
-      setMatches(prev => [...prev, newMatch]);
+      setMatches(prev => [...prev, matchWithTeam]);
     } else {
-      CloudStorageEngine.addMatch(newMatch);
+      CloudStorageEngine.addMatch(matchWithTeam);
     }
-    setSelectedMatchId(newMatch.id);
+    setSelectedMatchId(matchWithTeam.id);
+  };
+
+  const handleExportData = () => {
+    const role = effectiveCoachProfile?.role || 'head_coach';
+    if (!PermissionMatrix.canExecute(role, 'export_data')) {
+      alert('Permission denied: Only coaches can export data.');
+      return;
+    }
+    const bundle = DataExportService.generateExportBundle({
+      exportingRole: role,
+      clubName: team?.name || 'Inside Edge Cricket Club',
+      team,
+      players,
+      matches: filteredMatches,
+      focuses,
+      observations,
+      sessions: clubSessions
+    });
+    DataExportService.downloadJsonExport(bundle);
   };
 
   const handleUpdateMatch = (updatedMatch: MatchRecord) => {
@@ -407,13 +456,17 @@ export function App() {
       currentCoach={effectiveCoachProfile}
       onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
       onOpenCoachAssistant={() => setIsCoachAssistantOpen(true)}
+      onOpenRulesManagement={() => setIsRulesManagementOpen(true)}
+      onOpenReportProblem={() => setIsReportProblemOpen(true)}
+      onExportData={handleExportData}
+      onOpenOnboarding={() => setIsOnboardingOpen(true)}
       onSignOut={handleSignOut}
     >
       {activeTab === 'home' && (
         <HomeView
           session={currentClubSession}
           match={activeMatch}
-          matches={matches}
+          matches={filteredMatches}
           sessions={clubSessions}
           players={players}
           focuses={focuses}
@@ -468,7 +521,7 @@ export function App() {
 
       {activeTab === 'match' && (
         <MatchView
-          matches={matches}
+          matches={filteredMatches}
           players={players}
           clubTeams={clubTeams}
           activeScope={activeScope}
@@ -528,6 +581,59 @@ export function App() {
           observations={observations}
           activeScope={activeScope}
           onClose={() => setIsCoachAssistantOpen(false)}
+        />
+      )}
+
+      {isRulesManagementOpen && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsRulesManagementOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Competition rules management"
+            className="bottom-sheet-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <button
+                onClick={() => setIsRulesManagementOpen(false)}
+                className="btn btn-secondary"
+                style={{ width: 'auto', padding: '4px 12px', fontSize: '0.78rem' }}
+              >
+                Close Rules
+              </button>
+            </div>
+            <RulesManagementView
+              teamId={activeScope.mode === 'team' ? activeScope.teamId : 'ct-1'}
+              userRole={effectiveCoachProfile?.role || 'head_coach'}
+            />
+          </div>
+        </div>
+      )}
+
+      {isOnboardingOpen && (
+        <div className="bottom-sheet-overlay" onClick={() => setIsOnboardingOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Club setup wizard"
+            className="bottom-sheet-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <ClubSetupWizard
+              isOpen={isOnboardingOpen}
+              onClose={() => setIsOnboardingOpen(false)}
+              onComplete={() => setIsOnboardingOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {isReportProblemOpen && (
+        <ReportProblemModal
+          isOpen={isReportProblemOpen}
+          onClose={() => setIsReportProblemOpen(false)}
         />
       )}
     </AppShell>

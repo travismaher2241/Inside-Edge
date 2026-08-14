@@ -1,10 +1,11 @@
 // App Shell Layout Component with Navigation & Context Switching
 
 import React, { useState } from 'react';
-import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown, MessageCircleQuestion } from 'lucide-react';
+import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown, MessageCircleQuestion, AlertTriangle, Download } from 'lucide-react';
 import type { Team, CoachUser, ClubTeam, ActiveScope } from '../../types/cricket';
 import { ScopeSelectorModal } from './ScopeSelectorModal';
 import { getScopeLabel } from '../../modules/cricket/scopeHelpers';
+import { SyncStatusBadge } from './SyncStatusBadge';
 
 export type TabType = 'home' | 'train' | 'team' | 'match' | 'library';
 
@@ -20,6 +21,10 @@ interface AppShellProps {
   currentCoach?: CoachUser | null;
   onOpenCoachManager?: () => void;
   onOpenCoachAssistant?: () => void;
+  onOpenRulesManagement?: () => void;
+  onOpenReportProblem?: () => void;
+  onExportData?: () => void;
+  onOpenOnboarding?: () => void;
   onSignOut?: () => void;
   children: React.ReactNode;
 }
@@ -36,6 +41,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   currentCoach,
   onOpenCoachManager,
   onOpenCoachAssistant,
+  onOpenRulesManagement,
+  onOpenReportProblem,
+  onExportData,
+  onOpenOnboarding,
   onSignOut,
   children
 }) => {
@@ -75,6 +84,8 @@ export const AppShell: React.FC<AppShellProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <SyncStatusBadge />
+
           <button
             type="button"
             onClick={onOpenFieldBoard}
@@ -115,6 +126,77 @@ export const AppShell: React.FC<AppShellProps> = ({
               }}
             >
               <MessageCircleQuestion size={14} /> ASK
+            </button>
+          )}
+
+          {onOpenRulesManagement && (
+            <button
+              type="button"
+              aria-label="Competition Rules Management"
+              onClick={onOpenRulesManagement}
+              style={{
+                background: 'rgba(59, 130, 246, 0.15)',
+                border: '1px solid #3b82f6',
+                color: '#60a5fa',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              <BookOpen size={14} /> RULES
+            </button>
+          )}
+
+          {onExportData && (
+            <button
+              type="button"
+              aria-label="Export Club & Team Data"
+              onClick={onExportData}
+              title="Export Club Data (JSON)"
+              style={{
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid #10b981',
+                color: '#34d399',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              <Download size={14} /> EXPORT
+            </button>
+          )}
+
+          {onOpenReportProblem && (
+            <button
+              type="button"
+              aria-label="Report Problem"
+              onClick={onOpenReportProblem}
+              title="Report Problem / Feedback"
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid #ef4444',
+                color: '#f87171',
+                borderRadius: '8px',
+                padding: '6px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              <AlertTriangle size={14} />
             </button>
           )}
 
@@ -237,6 +319,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           totalPlayersCount={totalPlayersCount}
           onSelectScope={onSelectScope}
           onClose={() => setIsScopeModalOpen(false)}
+          onOpenOnboarding={onOpenOnboarding}
         />
       )}
     </div>

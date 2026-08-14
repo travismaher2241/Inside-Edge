@@ -66,3 +66,34 @@ export function deriveTrainingPriorities(observations: MatchObservation[]): stri
 
   return priorities;
 }
+
+/**
+ * Attaches the current active competition ruleset snapshot to a MatchRecord on creation,
+ * storing a lightweight resolved rules snapshot rather than duplicating full document sets (D-02, D-13).
+ */
+export function attachRulesSnapshotToMatch(match: MatchRecord, activeRuleSet?: any): MatchRecord {
+  if (!activeRuleSet || match.ruleSetId) return match;
+
+  const approvedRules = activeRuleSet.rules
+    ? activeRuleSet.rules.filter((r: any) => r.status === 'Approved').map((r: any) => ({
+        ruleId: r.id,
+        category: r.category,
+        title: r.title,
+        approvedInterpretation: r.approvedInterpretation || r.rawInterpretation,
+        sourceDocumentName: activeRuleSet.competitionName || 'Playing Conditions',
+        sourcePage: r.sourcePage || 1,
+        sourceSection: r.sourceSection
+      }))
+    : [];
+
+  return {
+    ...match,
+    ruleSetId: activeRuleSet.id,
+    ruleSetVersion: activeRuleSet.version,
+    appliedRulesSnapshot: {
+      capturedAt: new Date().toISOString(),
+      rules: approvedRules
+    }
+  };
+}
+
