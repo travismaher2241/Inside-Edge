@@ -39,6 +39,12 @@ const PLAYER_GROUP_OPTIONS = [
   { value: '16+', label: '16+ players', min: 16, max: 99 }
 ];
 
+const AGE_SUITABILITY_OPTIONS: { value: 'any' | 'junior' | 'senior'; label: string }[] = [
+  { value: 'any', label: 'Any age group' },
+  { value: 'junior', label: 'Junior-suitable' },
+  { value: 'senior', label: 'Senior-suitable' }
+];
+
 export const LibraryView: React.FC<LibraryViewProps> = ({
   activities,
   onAddActivityToSession,
@@ -50,6 +56,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [spaceFilter, setSpaceFilter] = useState<string>('all');
   const [maxDuration, setMaxDuration] = useState<number | null>(null);
   const [playerGroup, setPlayerGroup] = useState<string>('any');
+  const [ageSuitabilityFilter, setAgeSuitabilityFilter] = useState<'any' | 'junior' | 'senior'>('any');
 
   // Modals & Drawers
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
@@ -90,19 +97,29 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       }
     }
 
+    // 6. Age Suitability (absent/'all' on the activity means suitable for everyone)
+    if (ageSuitabilityFilter !== 'any') {
+      const suitability = activity.ageSuitability ?? 'all';
+      if (suitability !== 'all' && suitability !== ageSuitabilityFilter) {
+        return false;
+      }
+    }
+
     return true;
   });
 
   const activeFiltersCount = (selectedCategory !== 'ALL' ? 1 : 0)
     + (spaceFilter !== 'all' ? 1 : 0)
     + (maxDuration !== null ? 1 : 0)
-    + (playerGroup !== 'any' ? 1 : 0);
+    + (playerGroup !== 'any' ? 1 : 0)
+    + (ageSuitabilityFilter !== 'any' ? 1 : 0);
 
   const resetAllFilters = () => {
     setSelectedCategory('ALL');
     setSpaceFilter('all');
     setMaxDuration(null);
     setPlayerGroup('any');
+    setAgeSuitabilityFilter('any');
   };
 
   const handleAdd = (activity: Activity) => {
@@ -190,6 +207,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <span className="filter-chip">
               {PLAYER_GROUP_OPTIONS.find(g => g.value === playerGroup)?.label}
               <button aria-label="Remove player count filter" onClick={() => setPlayerGroup('any')} className="filter-chip-remove">✕</button>
+            </span>
+          )}
+          {ageSuitabilityFilter !== 'any' && (
+            <span className="filter-chip">
+              {AGE_SUITABILITY_OPTIONS.find(a => a.value === ageSuitabilityFilter)?.label}
+              <button aria-label="Remove age suitability filter" onClick={() => setAgeSuitabilityFilter('any')} className="filter-chip-remove">✕</button>
             </span>
           )}
           <button
@@ -359,6 +382,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       onClick={() => setPlayerGroup(grp.value)}
                     >
                       {grp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Age Suitability Filter */}
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>AGE SUITABILITY</div>
+                <div className="filter-pill-grid">
+                  {AGE_SUITABILITY_OPTIONS.map(age => (
+                    <button
+                      key={age.value}
+                      className={`filter-pill-btn ${ageSuitabilityFilter === age.value ? 'selected' : ''}`}
+                      onClick={() => setAgeSuitabilityFilter(age.value)}
+                    >
+                      {age.label}
                     </button>
                   ))}
                 </div>

@@ -22,6 +22,7 @@ import { AcceptInviteView } from './views/AcceptInviteView';
 import { CoachManagerModal } from './components/cricket/CoachManagerModal';
 import { QuickObservationModal } from './components/cricket/planner/QuickObservationModal';
 import { FieldBoardModal } from './components/cricket/FieldBoardModal';
+import { CoachAssistantPanel } from './components/cricket/CoachAssistantPanel';
 import { LiveClubSession } from './components/cricket/planner/LiveClubSession';
 import { activityToClubBlock, selectCurrentClubSession } from './modules/cricket/sessionModel';
 import { completeSessionWithFairness } from './modules/cricket/clubRotationEngine';
@@ -45,6 +46,7 @@ export function App() {
   const [coachProfileError, setCoachProfileError] = useState<CoachProfileLoadError | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isCoachManagerOpen, setIsCoachManagerOpen] = useState<boolean>(false);
+  const [isCoachAssistantOpen, setIsCoachAssistantOpen] = useState<boolean>(false);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const effectiveCoachProfile = isTestMode ? TEST_ACCESS_COACH : coachProfile;
 
@@ -377,6 +379,7 @@ export function App() {
             isOpen={!!observedPlayer}
             onClose={() => setObservedPlayer(null)}
             onSaved={handleSaveObservation}
+            isJuniorTeam={!!clubTeams.find(t => t.id === observedPlayer.primaryTeamId)?.juniorMode}
           />
         )}
       </div>
@@ -403,6 +406,7 @@ export function App() {
       onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
       currentCoach={effectiveCoachProfile}
       onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
+      onOpenCoachAssistant={() => setIsCoachAssistantOpen(true)}
       onSignOut={handleSignOut}
     >
       {activeTab === 'home' && (
@@ -493,6 +497,7 @@ export function App() {
           isOpen={!!observedPlayer}
           onClose={() => setObservedPlayer(null)}
           onSaved={handleSaveObservation}
+          isJuniorTeam={!!clubTeams.find(t => t.id === observedPlayer.primaryTeamId)?.juniorMode}
         />
       )}
 
@@ -512,6 +517,16 @@ export function App() {
         <CoachManagerModal
           currentCoach={coachProfile}
           onClose={() => setIsCoachManagerOpen(false)}
+        />
+      )}
+
+      {isCoachAssistantOpen && (
+        <CoachAssistantPanel
+          players={players}
+          sessions={clubSessions}
+          focuses={focuses}
+          observations={observations}
+          onClose={() => setIsCoachAssistantOpen(false)}
         />
       )}
     </AppShell>

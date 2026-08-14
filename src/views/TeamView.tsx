@@ -1,11 +1,39 @@
 // Team Roster & Player Profile View for Inside Edge (Supports Team vs Club Context)
-import React, { useState } from 'react';
-import type { Player, DevelopmentFocus, Observation, DevelopmentDomain, FocusLifecycleState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
+import React, { useState, useEffect } from 'react';
+import type { Player, DevelopmentFocus, Observation, ObservationAttachment, DevelopmentDomain, FocusLifecycleState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
 import { getRoleBadgeLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
 import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
+import { getAttachmentDownloadUrl } from '../modules/cricket/mediaStorageEngine';
 import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
 import { StorageEngine } from '../storage/db';
+
+const ObservationClipPlayer: React.FC<{ attachment: ObservationAttachment }> = ({ attachment }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+    getAttachmentDownloadUrl(attachment.storagePath)
+      .then(resolved => { if (!cancelled) setUrl(resolved); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load clip.'); });
+    return () => { cancelled = true; };
+  }, [attachment.storagePath]);
+
+  if (error) {
+    return <div style={{ fontSize: '0.72rem', color: '#f97316', marginTop: '6px' }}>{error}</div>;
+  }
+  if (!url) {
+    return <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px' }}>Loading clip…</div>;
+  }
+  return (
+    <video
+      controls
+      src={url}
+      style={{ width: '100%', maxHeight: '220px', borderRadius: '8px', marginTop: '6px', background: '#000' }}
+    />
+  );
+};
 
 interface TeamViewProps {
   players: Player[];
@@ -604,6 +632,9 @@ export const TeamView: React.FC<TeamViewProps> = ({
                       <span>{new Date(obs.createdAt).toLocaleDateString()}</span>
                     </div>
                     <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{obs.textNote}</div>
+                    {obs.attachments?.map(attachment => (
+                      <ObservationClipPlayer key={attachment.id} attachment={attachment} />
+                    ))}
                   </div>
                 ))
               ) : (

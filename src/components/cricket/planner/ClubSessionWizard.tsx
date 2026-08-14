@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type {
   Player,
   ClubTeam,
@@ -13,7 +13,9 @@ import type {
 } from '../../../types/cricket';
 import {
   calculateSessionFeasibility,
-  generateClubRotationPlan
+  generateClubRotationPlan,
+  generateSessionRationale,
+  getPlanBalanceLabel
 } from '../../../modules/cricket/clubRotationEngine';
 import { CentreWicketScenarioBuilder } from './CentreWicketScenarioBuilder';
 import { RsvpInvitationService } from '../../../modules/cricket/rsvpInvitationService';
@@ -54,6 +56,15 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[]>(() => resources.filter(r => r.active).map(r => r.id));
   const [rotationBlockMins, setRotationBlockMins] = useState<number>(12);
   const defaultGroupingStrategy: GroupingStrategy = 'graded';
+
+  // Junior teams default to shorter rotation blocks (blueprint §14.2)
+  const includesJuniorTeam = useMemo(
+    () => teams.some(t => selectedTeamIds.includes(t.id) && t.juniorMode),
+    [teams, selectedTeamIds]
+  );
+  useEffect(() => {
+    setRotationBlockMins(includesJuniorTeam ? 8 : 12);
+  }, [includesJuniorTeam]);
   const [sessionObjectives, setSessionObjectives] = useState<string[]>([
     'New-ball decision making',
     'T20 Middle overs scenario',
@@ -103,6 +114,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   const [editingPlayerSettingsId, setEditingPlayerSettingsId] = useState<string | null>(null);
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
   const [showPlanningChecks, setShowPlanningChecks] = useState<boolean>(false);
+  const [showRationale, setShowRationale] = useState<boolean>(false);
 
   // Step 4: Manual Locks
   const [manualLocks] = useState<Record<string, boolean>>({});
@@ -214,6 +226,12 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
     };
   }, [activeResources, attendingPlayers, teams, selectedTeamIds, availabilityRecords, staffAssignments, sessionObjectives, rotationBlockMins, startTime, finishTime, manualLocks, rollingLedger, centreWicketScenario]);
 
+  // Plain-English "Why this plan?" explanation, generated from the same engine output
+  const rationale = useMemo(() => {
+    if (!engineOutput) return '';
+    return generateSessionRationale(engineOutput, sessionObjectives);
+  }, [engineOutput, sessionObjectives]);
+
   // Helper Toggles
   const toggleTeamSelection = (teamId: string) => {
     setSelectedTeamIds(prev => prev.includes(teamId) ? prev.filter(id => id !== teamId) : [...prev, teamId]);
@@ -323,7 +341,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       activeBlockIndex: 0,
       activeRotationIndex: 0,
       status: action === 'launch' ? 'live' : 'planned',
-      warnings: engineOutput.warnings
+      warnings: engineOutput.warnings,
+      rationale
     };
     try {
       await onFinalise(newSession, action);
@@ -477,11 +496,16 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                         onClick={() => toggleTeamSelection(t.id)}
                         className={`filter-pill-btn ${isSel ? 'selected' : ''}`}
                       >
-                        {isSel ? '✓ ' : '+ '}{t.name}
+                        {isSel ? '✓ ' : '+ '}{t.juniorMode ? '👶 ' : ''}{t.name}
                       </button>
                     );
                   })}
                 </div>
+                {includesJuniorTeam && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', marginTop: '8px' }}>
+                    Junior team selected — rotation blocks default to 8 minutes instead of 12.
+                  </div>
+                )}
               </div>
 
               {/* Training Areas Selection */}
@@ -725,14 +749,36 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                   <div>✓ Batting opportunities balanced</div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowPlanningChecks(!showPlanningChecks)}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', marginTop: '10px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  {showPlanningChecks ? 'Hide planning details' : 'View planning details'} {showPlanningChecks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
+                <div style={{ display: 'flex', gap: '14px', marginTop: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPlanningChecks(!showPlanningChecks)}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    {showPlanningChecks ? 'Hide planning details' : 'View planning details'} {showPlanningChecks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRationale(!showRationale)}
+                    disabled={!rationale}
+                    style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: rationale ? 'pointer' : 'default', opacity: rationale ? 1 : 0.5, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    {showRationale ? 'Hide why this plan?' : 'Why this plan?'} {showRationale ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                </div>
               </div>
+
+              {/* Why This Plan? Rationale Drawer */}
+              {showRationale && rationale && (
+                <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-elevated)' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    WHY THIS PLAN?
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: 1.5 }}>
+                    {rationale}
+                  </div>
+                </div>
+              )}
 
               {/* Optional Planning Checks Drawer */}
               {showPlanningChecks && engineOutput && (
@@ -768,7 +814,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                   <div>
                     <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>PLAYER OPPORTUNITY</h4>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Good balance — Most players have similar opportunities.
+                      {getPlanBalanceLabel(engineOutput?.explainablePlanScore ?? 85)}
                     </div>
                   </div>
                   <span className="badge badge-gold" style={{ fontSize: '0.9rem', fontWeight: 800 }}>

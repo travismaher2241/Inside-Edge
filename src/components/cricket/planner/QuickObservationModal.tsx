@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Observation, ObservationTag, DevelopmentFocus, Player } from '../../../types/cricket';
 import { IndexedDbJournal } from '../../../storage/indexedDbJournal';
-import { Mic, MicOff, X, Save } from 'lucide-react';
+import { uploadObservationClip, MediaUploadError } from '../../../modules/cricket/mediaStorageEngine';
+import { Mic, MicOff, X, Save, Video, Paperclip, Loader2 } from 'lucide-react';
 
 interface QuickObservationModalProps {
   player: Player;
@@ -10,6 +11,8 @@ interface QuickObservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved?: (observation: Observation) => void;
+  /** When the player's primary team has Junior Mode on, default guardian sharing to on. */
+  isJuniorTeam?: boolean;
 }
 
 const TAG_OPTIONS: ObservationTag[] = [
@@ -27,15 +30,20 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
   activeFocuses = [],
   isOpen,
   onClose,
-  onSaved
+  onSaved,
+  isJuniorTeam = false
 }) => {
   const [textNote, setTextNote] = useState('');
   const [selectedTags, setSelectedTags] = useState<ObservationTag[]>(['Technique']);
   const [selectedFocusId, setSelectedFocusId] = useState<string>(activeFocuses[0]?.id || '');
   const [staffVisibility, setStaffVisibility] = useState<'all_coaches' | 'head_coach_only'>('all_coaches');
-  const [shareWithPlayerGuardian, setShareWithPlayerGuardian] = useState<boolean>(false);
+  const [shareWithPlayerGuardian, setShareWithPlayerGuardian] = useState<boolean>(isJuniorTeam);
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
+  const [selectedClip, setSelectedClip] = useState<File | null>(null);
+  const [isUploadingClip, setIsUploadingClip] = useState(false);
+  const [clipWarning, setClipWarning] = useState<string>('');
+  const clipInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -100,6 +108,24 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
       syncStatus: 'pending'
     };
 
+    // Clip upload is best-effort: a failed upload never loses the coach's note.
+    let clipFailureMessage = '';
+    if (selectedClip) {
+      setIsUploadingClip(true);
+      try {
+        const attachment = await uploadObservationClip({
+          observationId: newObservation.id,
+          file: selectedClip,
+          uploadedByUserId: newObservation.createdByUserId
+        });
+        newObservation.attachments = [attachment];
+      } catch (err) {
+        clipFailureMessage = err instanceof MediaUploadError ? err.message : 'Clip upload failed.';
+      } finally {
+        setIsUploadingClip(false);
+      }
+    }
+
     // Save to IndexedDB outbox
     await IndexedDbJournal.appendOperation(sessionId || 'general', {
       operationId: newObservation.operationId,
@@ -111,6 +137,15 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
     });
 
     onSaved?.(newObservation);
+
+    if (clipFailureMessage) {
+      // Keep the modal open so the coach sees the clip failed, without losing their saved note.
+      setClipWarning(`Note saved, but the clip did not upload: ${clipFailureMessage}`);
+      setSelectedClip(null);
+      setTextNote('');
+      return;
+    }
+
     onClose();
   };
 
@@ -157,8 +192,14 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
           </button>
         </div>
 
+        {clipWarning && (
+          <div role="status" style={{ fontSize: '0.78rem', color: '#f97316', background: 'rgba(249, 115, 22, 0.12)', border: '1px solid #f97316', borderRadius: '6px', padding: '8px 10px' }}>
+            {clipWarning}
+          </div>
+        )}
+
         {/* Voice Dictation Button */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             type="button"
             className={`btn ${isRecording ? 'btn-danger' : 'btn-secondary'}`}
@@ -171,6 +212,43 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
           {!recognition && (
             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
               Voice unavailable — type below
+            </span>
+          )}
+        </div>
+
+        {/* Attach Clip */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            ref={clipInputRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const file = e.target.files?.[0] ?? null;
+              setSelectedClip(file);
+              setClipWarning('');
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => clipInputRef.current?.click()}
+            style={{ fontSize: '0.8rem', height: '36px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Video size={16} /> {selectedClip ? 'Change Clip' : 'Attach Clip'}
+          </button>
+          {selectedClip && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Paperclip size={12} /> {selectedClip.name}
+              <button
+                type="button"
+                aria-label="Remove attached clip"
+                onClick={() => { setSelectedClip(null); if (clipInputRef.current) clipInputRef.current.value = ''; }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'flex' }}
+              >
+                <X size={14} />
+              </button>
             </span>
           )}
         </div>
@@ -275,8 +353,14 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
           <button className="btn btn-secondary" onClick={onClose} style={{ width: 'auto', fontSize: '0.8rem' }}>
             Cancel
           </button>
-          <button className="btn btn-gold" onClick={handleSave} style={{ width: 'auto', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Save size={16} /> Save Note
+          <button
+            className="btn btn-gold"
+            onClick={handleSave}
+            disabled={isUploadingClip}
+            style={{ width: 'auto', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', opacity: isUploadingClip ? 0.7 : 1 }}
+          >
+            {isUploadingClip ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {isUploadingClip ? 'Uploading Clip…' : 'Save Note'}
           </button>
         </div>
       </div>

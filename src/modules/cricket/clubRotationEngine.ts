@@ -573,6 +573,75 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
 }
 
 // -------------------------------------------------------------------
+// 2b. "Why This Plan?" Rationale Generator (template-based, no LLM)
+// -------------------------------------------------------------------
+
+function categoriseResourceObjective(resourceName: string): string {
+  const lower = resourceName.toLowerCase();
+  if (lower.includes('new ball') || lower.includes('new-ball') || lower.includes('seam')) return 'new-ball decision making';
+  if (lower.includes('spin')) return 'spin & strike rotation';
+  if (lower.includes('death') || lower.includes('yorker')) return 'death bowling';
+  if (lower.includes('centre wicket') || lower.includes('center wicket')) return 'centre-wicket scenario play';
+  if (lower.includes('outfield') || lower.includes('fielding')) return 'fielding & ground work';
+  if (lower.includes('machine')) return 'machine-fed repetition';
+  return 'general net practice';
+}
+
+function joinWithCommasAnd(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]}, and ${items[1]}`;
+  const allButLast = items.slice(0, -1).join(', ');
+  const last = items[items.length - 1];
+  return `${allButLast}, and ${last}`;
+}
+
+/**
+ * Produces a short, plain-English explanation of why the plan looks the way it does,
+ * built entirely from data already computed by generateClubRotationPlan — no external
+ * AI call, so it stays available even if a future LLM-backed feature is unavailable.
+ */
+export function generateSessionRationale(
+  output: ClubRotationEngineOutput,
+  sessionObjectives: string[]
+): string {
+  if (!output.rotationBlocks.length) {
+    return 'No training areas were active, so no rotation plan could be generated.';
+  }
+
+  const firstBlock = output.rotationBlocks[0];
+  const activeAssignments = firstBlock.resourceAssignments.filter(
+    a => a.batterPlayerIds.length > 0 || a.bowlerPodPlayerIds.length > 0 || a.centreWicketScenario
+  );
+
+  const laneDescriptions = activeAssignments.map(a => {
+    const netLabel = (a.resourceName.match(/Net\s*\d+/i) || [a.resourceName])[0];
+    return `${netLabel} to ${categoriseResourceObjective(a.resourceName)}`;
+  });
+
+  const objectiveList = sessionObjectives.filter(Boolean).map(o => o.toLowerCase());
+  const objectiveSentence = objectiveList.length > 0
+    ? `This session is built around ${joinWithCommasAnd(objectiveList)}.`
+    : '';
+
+  const allocationSentence = laneDescriptions.length > 0
+    ? `The plan allocates ${joinWithCommasAnd(laneDescriptions)}.`
+    : '';
+
+  const concernSentence = output.unsatisfiedSoftConstraints.length > 0
+    ? output.unsatisfiedSoftConstraints[0]
+    : '';
+
+  return [objectiveSentence, allocationSentence, concernSentence].filter(Boolean).join(' ');
+}
+
+export function getPlanBalanceLabel(explainablePlanScore: number): string {
+  if (explainablePlanScore >= 85) return 'Good balance — most players have similar opportunities.';
+  if (explainablePlanScore >= 70) return 'Fair balance — a small number of players have less opportunity than others.';
+  return 'Needs attention — opportunity is unevenly spread across the squad.';
+}
+
+// -------------------------------------------------------------------
 // 3. Live Change & Future-Only Recalculation Handlers
 // -------------------------------------------------------------------
 

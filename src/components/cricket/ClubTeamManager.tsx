@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import type { ClubTeam, MatchReport } from '../../types/cricket';
 import { getClubTeams, createClubTeam } from '../../modules/cricket/matchReportService';
 import { getLatestReport } from '../../modules/cricket/roundupAggregation';
+import { CloudStorageEngine } from '../../modules/cricket/cloudStorageEngine';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { FirebaseNotConfiguredBanner } from './FirebaseNotConfiguredBanner';
-import { Copy, Plus, Users, Share2, MoreVertical, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
+import { Copy, Plus, Users, Share2, MoreVertical, ChevronDown, ChevronUp, Eye, EyeOff, Baby } from 'lucide-react';
 
 interface ClubTeamManagerProps {
   reports?: MatchReport[];
@@ -16,6 +17,7 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
   const [teamName, setTeamName] = useState<string>('');
   const [ageGroup, setAgeGroup] = useState<string>('Seniors');
+  const [juniorModeOnCreate, setJuniorModeOnCreate] = useState<boolean>(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [visibleUrlToken, setVisibleUrlToken] = useState<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -44,12 +46,34 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
 
     try {
       const created = await createClubTeam(teamName.trim(), ageGroup.trim());
-      setTeams(current => [...current, created]);
+      const withJuniorMode = juniorModeOnCreate ? { ...created, juniorMode: true } : created;
+      if (juniorModeOnCreate) {
+        try {
+          await CloudStorageEngine.saveClubTeam(withJuniorMode);
+        } catch (err) {
+          console.error('Failed to save junior mode flag:', err);
+        }
+      }
+      setTeams(current => [...current, withJuniorMode]);
       setTeamName('');
+      setJuniorModeOnCreate(false);
       setShowAddForm(false);
       setFeedback(`${created.name} added. Captain report link ready.`);
     } catch (err) {
       console.error('Failed to create team:', err);
+    }
+  };
+
+  const handleToggleJuniorMode = async (t: ClubTeam) => {
+    const updated: ClubTeam = { ...t, juniorMode: !t.juniorMode };
+    setTeams(current => current.map(item => item.id === t.id ? updated : item));
+    try {
+      await CloudStorageEngine.saveClubTeam(updated);
+      setFeedback(`${t.name} is now ${updated.juniorMode ? 'a Junior Team' : 'a Senior Team'}.`);
+    } catch (err) {
+      console.error('Failed to update junior mode:', err);
+      setTeams(current => current.map(item => item.id === t.id ? t : item));
+      setFeedback('Could not update junior mode — please try again.');
     }
   };
 
@@ -188,6 +212,14 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
               />
             </div>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={juniorModeOnCreate}
+              onChange={e => setJuniorModeOnCreate(e.target.checked)}
+            />
+            Junior Team — shorter default blocks, age-appropriate activities, guardian sharing on by default
+          </label>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button
               type="button"
@@ -244,6 +276,15 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-main)' }}>{t.name}</span>
                     <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>{t.ageGroup}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleJuniorMode(t)}
+                      className={t.juniorMode ? 'badge badge-gold' : 'badge'}
+                      style={{ fontSize: '0.65rem', display: 'inline-flex', alignItems: 'center', gap: '3px', border: t.juniorMode ? undefined : '1px solid var(--border-light)', cursor: 'pointer' }}
+                      title="Click to toggle Junior Mode for this team"
+                    >
+                      <Baby size={11} /> {t.juniorMode ? 'Junior Team' : 'Mark as Junior'}
+                    </button>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                     Captain report link active {latestReport ? `· Last report ${new Date(latestReport.createdAt).toLocaleDateString()}` : ''}

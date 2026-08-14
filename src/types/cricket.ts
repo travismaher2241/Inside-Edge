@@ -424,6 +424,8 @@ export interface Activity {
   safetyNotes?: string;
   participationDensity: 'High' | 'Medium' | 'Low';
   tags: string[];
+  /** Absent/'all' means suitable for any age group. */
+  ageSuitability?: 'junior' | 'senior' | 'all';
 }
 
 export type GroupingStrategy = 'graded' | 'mixed';
@@ -570,6 +572,8 @@ export interface ClubTeam {
   defaultTrainingWindow?: { startTime: string; endTime: string };
   preferredFacilityGroupId?: string;
   notes?: string;
+  /** When true, sessions/activities/observations for this team default to junior-appropriate behaviour. */
+  juniorMode?: boolean;
 }
 
 // -------------------------------------------------------------------

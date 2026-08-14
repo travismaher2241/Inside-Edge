@@ -1,7 +1,7 @@
 // App Shell Layout Component with Navigation & Context Switching
 
 import React, { useState } from 'react';
-import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown } from 'lucide-react';
+import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown, MessageCircleQuestion } from 'lucide-react';
 import type { Team, CoachUser, ClubTeam, ActiveScope } from '../../types/cricket';
 import { ScopeSelectorModal } from './ScopeSelectorModal';
 import { getScopeLabel } from '../../modules/cricket/scopeHelpers';
@@ -19,6 +19,7 @@ interface AppShellProps {
   onOpenFieldBoard: () => void;
   currentCoach?: CoachUser | null;
   onOpenCoachManager?: () => void;
+  onOpenCoachAssistant?: () => void;
   onSignOut?: () => void;
   children: React.ReactNode;
 }
@@ -34,6 +35,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   onOpenFieldBoard,
   currentCoach,
   onOpenCoachManager,
+  onOpenCoachAssistant,
   onSignOut,
   children
 }) => {
@@ -92,6 +94,29 @@ export const AppShell: React.FC<AppShellProps> = ({
           >
             <Shield size={14} /> FIELD BOARD
           </button>
+
+          {onOpenCoachAssistant && (
+            <button
+              type="button"
+              aria-label="Open coach assistant"
+              onClick={onOpenCoachAssistant}
+              style={{
+                background: 'rgba(229, 169, 60, 0.15)',
+                border: '1px solid var(--border-gold)',
+                color: 'var(--accent-gold)',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              <MessageCircleQuestion size={14} /> ASK
+            </button>
+          )}
 
           {currentCoach && (
             <>
