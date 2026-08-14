@@ -1,4 +1,4 @@
-import type { CompetitionRule, CompetitionRuleSet, RuleCondition, RuleStructuredValue } from './competitionRuleTypes';
+import type { CompetitionRule, CompetitionRuleSet } from './competitionRuleTypes';
 
 export function validateRule(rule: Partial<CompetitionRule>): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];

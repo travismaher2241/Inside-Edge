@@ -1,6 +1,17 @@
-import type { CoachingObjective, CoachingObjectiveId } from '../../types/cricket';
+import type { CoachingObjectiveId, DevelopmentDomain } from '../../types/cricket';
 
-export const COACHING_OBJECTIVES_REGISTRY: Record<CoachingObjectiveId, CoachingObjective> = {
+// Legacy lightweight taxonomy, superseded by coachingObjectiveRegistry.ts's fuller
+// CoachingObjective records. Kept only for matchesObjective()'s parent/child lookups
+// (see activityUsageService.ts), so it deliberately doesn't carry the full
+// CoachingObjective shape.
+interface LegacyObjectiveEntry {
+  id: CoachingObjectiveId;
+  name: string;
+  domain: DevelopmentDomain;
+  parentObjectiveId?: CoachingObjectiveId;
+}
+
+export const COACHING_OBJECTIVES_REGISTRY: Record<CoachingObjectiveId, LegacyObjectiveEntry> = {
   // Batting Domain
   playing_spin: {
     id: 'playing_spin',
@@ -77,7 +88,7 @@ export const COACHING_OBJECTIVES_REGISTRY: Record<CoachingObjectiveId, CoachingO
 };
 
 export const CoachingObjectiveTaxonomy = {
-  getObjective(id: CoachingObjectiveId): CoachingObjective | undefined {
+  getObjective(id: CoachingObjectiveId): LegacyObjectiveEntry | undefined {
     return COACHING_OBJECTIVES_REGISTRY[id];
   },
 

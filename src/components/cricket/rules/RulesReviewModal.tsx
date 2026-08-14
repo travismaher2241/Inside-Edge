@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, AlertTriangle, FileText, Edit3, ShieldAlert } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, FileText, Edit3 } from 'lucide-react';
 import type { CompetitionRuleSet, CompetitionRule } from '../../../modules/competition-rules/schemas/competitionRuleTypes';
 
 interface RulesReviewModalProps {

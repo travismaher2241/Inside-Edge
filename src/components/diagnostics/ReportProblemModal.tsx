@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, MessageSquare, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { X, MessageSquare, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { ProblemReporter, type ProblemReport } from '../../modules/diagnostics/problemReporter';
 
 interface ReportProblemModalProps {

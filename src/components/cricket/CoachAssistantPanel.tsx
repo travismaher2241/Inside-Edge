@@ -3,7 +3,7 @@
 // pulled straight from squad, session, observation, and competition-rule
 // data. Anything it can't confidently match, it says so — never a guess.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Player, ClubTrainingSession, DevelopmentFocus, Observation, MatchReport, ActiveScope } from '../../types/cricket';
 import { getMatchReports } from '../../modules/cricket/matchReportService';
 import {

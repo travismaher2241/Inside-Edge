@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, X, FileText } from 'lucide-react';
+import { RotateCcw, FileText } from 'lucide-react';
 import { DraftRecoveryEngine, type UnsavedDraft } from '../../modules/diagnostics/draftRecoveryEngine';
 
 interface DraftRecoveryBannerProps {

@@ -1,8 +1,8 @@
-import type { CompetitionRuleSet, CompetitionRule, RuleStatus } from '../schemas/competitionRuleTypes';
+import type { CompetitionRuleSet, CompetitionRule } from '../schemas/competitionRuleTypes';
 import { CompetitionRuleRepository } from '../storage/competitionRuleRepository';
 
 export const ApprovalService = {
-  approveRule(ruleSetId: string, ruleId: string, approvedBy: string): CompetitionRuleSet | undefined {
+  approveRule(ruleSetId: string, ruleId: string, _approvedBy: string): CompetitionRuleSet | undefined {
     const ruleSet = CompetitionRuleRepository.getRuleSet(ruleSetId);
     if (!ruleSet) return undefined;
 
@@ -24,7 +24,7 @@ export const ApprovalService = {
     ruleSetId: string,
     ruleId: string,
     edits: Partial<CompetitionRule>,
-    editedBy: string
+    _editedBy: string
   ): CompetitionRuleSet | undefined {
     const ruleSet = CompetitionRuleRepository.getRuleSet(ruleSetId);
     if (!ruleSet) return undefined;
@@ -46,7 +46,7 @@ export const ApprovalService = {
     return ruleSet;
   },
 
-  rejectRule(ruleSetId: string, ruleId: string, rejectedBy: string): CompetitionRuleSet | undefined {
+  rejectRule(ruleSetId: string, ruleId: string, _rejectedBy: string): CompetitionRuleSet | undefined {
     const ruleSet = CompetitionRuleRepository.getRuleSet(ruleSetId);
     if (!ruleSet) return undefined;
 
@@ -65,7 +65,7 @@ export const ApprovalService = {
   addManualRule(
     ruleSetId: string,
     rule: Omit<CompetitionRule, 'id' | 'status' | 'rawInterpretation'> & { rawInterpretation?: string },
-    createdBy: string
+    _createdBy: string
   ): CompetitionRuleSet | undefined {
     const ruleSet = CompetitionRuleRepository.getRuleSet(ruleSetId);
     if (!ruleSet) return undefined;

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Upload, BookOpen, ShieldCheck, AlertTriangle, FileText, Plus, CheckCircle2, History, GitCompare, User } from 'lucide-react';
+import { Upload, BookOpen, ShieldCheck, AlertTriangle, FileText, Plus, CheckCircle2, GitCompare } from 'lucide-react';
 import type { CompetitionRuleSet, CompetitionRule } from '../../../modules/competition-rules/schemas/competitionRuleTypes';
-import type { CompetitionDocument } from '../../../modules/competition-rules/documents/documentTypes';
 import { DocumentService } from '../../../modules/competition-rules/documents/documentService';
 import { extractPdfPages } from '../../../modules/competition-rules/ingestion/pdfTextExtractor';
 import { RuleReviewService } from '../../../modules/competition-rules/review/ruleReviewService';
@@ -27,7 +26,7 @@ export const RulesManagementView: React.FC<RulesManagementViewProps> = ({
   season = '2026/27'
 }) => {
   const [selectedSeason, setSelectedSeason] = useState(season);
-  const [competitionName, setCompetitionName] = useState('Warragul & District Cricket Association');
+  const competitionName = 'Warragul & District Cricket Association';
   const [gradeName, setGradeName] = useState('Division 1');
 
   const [activeRuleSet, setActiveRuleSet] = useState<CompetitionRuleSet | undefined>(
@@ -91,7 +90,6 @@ export const RulesManagementView: React.FC<RulesManagementViewProps> = ({
       // 2. Draft ruleset creation / versioning
       if (activeRuleSet) {
         // Revision upload -> versioning
-        const pageResult = extractPdfPages(content);
         const candidates = RuleReviewService.processDocumentToDraftRuleSet({
           organisationName: competitionName,
           competitionName,

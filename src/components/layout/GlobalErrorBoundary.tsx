@@ -1,4 +1,4 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertOctagon, RefreshCw, Home } from 'lucide-react';
 import { BetaDiagnostics } from '../../modules/diagnostics/betaDiagnostics';
 import { DraftRecoveryEngine } from '../../modules/diagnostics/draftRecoveryEngine';

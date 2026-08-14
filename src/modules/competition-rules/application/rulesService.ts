@@ -168,7 +168,6 @@ export const RulesService = {
     }
 
     const maxBowlerRule = rules.find(r => r.category === 'bowling' && r.title.toLowerCase().includes('maximum overs'));
-    const powerplayRule = rules.find(r => r.category === 'fielding' && r.title.toLowerCase().includes('powerplay'));
     const matchFormatRule = rules.find(r => r.category === 'match_structure');
 
     let maxOvers: number | undefined;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Building2, Users, FileText, CheckCircle2, ArrowRight, Plus, Trash2, Calendar } from 'lucide-react';
+import { X, FileText, ArrowRight, Plus, Trash2, Calendar } from 'lucide-react';
 import type { ClubSetupData } from '../../modules/onboarding/onboardingService';
 
 interface ClubSetupWizardProps {
