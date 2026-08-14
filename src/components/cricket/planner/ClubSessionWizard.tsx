@@ -229,8 +229,12 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   // Plain-English "Why this plan?" explanation, generated from the same engine output
   const rationale = useMemo(() => {
     if (!engineOutput) return '';
-    return generateSessionRationale(engineOutput, sessionObjectives);
-  }, [engineOutput, sessionObjectives]);
+    return generateSessionRationale(engineOutput, sessionObjectives, {
+      players: attendingPlayers,
+      fairnessLedger: rollingLedger,
+      manualLocks
+    });
+  }, [engineOutput, sessionObjectives, attendingPlayers, rollingLedger, manualLocks]);
 
   // Helper Toggles
   const toggleTeamSelection = (teamId: string) => {

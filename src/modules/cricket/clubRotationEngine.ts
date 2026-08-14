@@ -14,7 +14,8 @@ import type {
   PriorityMatchup,
   ClubTrainingSession,
   GroupingStrategy,
-  PlayerTrainingProfile
+  PlayerTrainingProfile,
+  DevelopmentFocus
 } from '../../types/cricket';
 import { buildBlockDurations } from './sessionModel';
 
@@ -601,12 +602,39 @@ function joinWithCommasAnd(items: string[]): string {
  * built entirely from data already computed by generateClubRotationPlan — no external
  * AI call, so it stays available even if a future LLM-backed feature is unavailable.
  */
-export function generateSessionRationale(
+export interface StructuredRationaleOptions {
+  players?: Player[];
+  developmentFocuses?: DevelopmentFocus[];
+  fairnessLedger?: RollingFairnessLedger[];
+  matchReviewIssues?: string[];
+  userRole?: string;
+  manualLocks?: Record<string, boolean>;
+}
+
+export interface StructuredSessionRationale {
+  teamRationale: string;
+  activityRationale: string;
+  playerRationale: Array<{ playerId: string; reason: string }>;
+  fullTextRationale: string;
+}
+
+/**
+ * Produces a structured, plain-English explanation of why the plan looks the way it does,
+ * with optional player-aware evidence (active development focus, fairness ledger, locked assignments).
+ */
+export function generateStructuredRationale(
   output: ClubRotationEngineOutput,
-  sessionObjectives: string[]
-): string {
+  sessionObjectives: string[],
+  options: StructuredRationaleOptions = {}
+): StructuredSessionRationale {
   if (!output.rotationBlocks.length) {
-    return 'No training areas were active, so no rotation plan could be generated.';
+    const emptyMsg = 'No training areas were active, so no rotation plan could be generated.';
+    return {
+      teamRationale: emptyMsg,
+      activityRationale: '',
+      playerRationale: [],
+      fullTextRationale: emptyMsg
+    };
   }
 
   const firstBlock = output.rotationBlocks[0];
@@ -620,11 +648,11 @@ export function generateSessionRationale(
   });
 
   const objectiveList = sessionObjectives.filter(Boolean).map(o => o.toLowerCase());
-  const objectiveSentence = objectiveList.length > 0
+  const teamRationale = objectiveList.length > 0
     ? `This session is built around ${joinWithCommasAnd(objectiveList)}.`
-    : '';
+    : 'This session is structured around standard facility rotation blocks.';
 
-  const allocationSentence = laneDescriptions.length > 0
+  const activityRationale = laneDescriptions.length > 0
     ? `The plan allocates ${joinWithCommasAnd(laneDescriptions)}.`
     : '';
 
@@ -632,8 +660,86 @@ export function generateSessionRationale(
     ? output.unsatisfiedSoftConstraints[0]
     : '';
 
-  return [objectiveSentence, allocationSentence, concernSentence].filter(Boolean).join(' ');
+  const playerRationaleList: Array<{ playerId: string; reason: string }> = [];
+
+  // Filter confidential information if userRole is assistant_coach or player
+  const allowPrivateDevFocus = options.userRole !== 'assistant_coach';
+
+  if (options.players && options.players.length > 0 && allowPrivateDevFocus) {
+    output.rotationBlocks.forEach((block, blockIndex) => {
+      block.resourceAssignments.forEach(assignment => {
+        if (options.manualLocks) {
+          const allPlayersInLane = [...assignment.batterPlayerIds, ...assignment.bowlerPodPlayerIds];
+          allPlayersInLane.forEach(pid => {
+            const isLocked = options.manualLocks?.[`${blockIndex}_${assignment.resourceId}_${pid}`];
+            const p = options.players?.find(pl => pl.id === pid);
+            if (isLocked && p && !playerRationaleList.some(pr => pr.playerId === pid)) {
+              playerRationaleList.push({
+                playerId: pid,
+                reason: `${p.name} was assigned via explicit coach lock for specific technical work.`
+              });
+            }
+          });
+        }
+
+        if (options.developmentFocuses) {
+          assignment.batterPlayerIds.forEach(pid => {
+            const devFocus = options.developmentFocuses?.find(f => f.playerId === pid && f.state !== 'ARCHIVED');
+            const p = options.players?.find(pl => pl.id === pid);
+            if (p && devFocus && !playerRationaleList.some(pr => pr.playerId === pid)) {
+              playerRationaleList.push({
+                playerId: pid,
+                reason: `${p.name} has been assigned to ${assignment.resourceName} because '${devFocus.focusStatement}' is an active development focus.`
+              });
+            }
+          });
+        }
+      });
+    });
+  }
+
+  // Participation deficit evidence from ledger
+  if (options.fairnessLedger && options.players) {
+    options.fairnessLedger.forEach(entry => {
+      if (entry.accumulatedFairnessCreditMinutes > 15) {
+        const p = options.players?.find(pl => pl.id === entry.playerId);
+        if (p && !playerRationaleList.some(pr => pr.playerId === p.id)) {
+          playerRationaleList.push({
+            playerId: p.id,
+            reason: `${p.name} has been prioritized for extra batting exposure due to a recent participation deficit.`
+          });
+        }
+      }
+    });
+  }
+
+  const playerRationaleSentence = playerRationaleList.length > 0
+    ? playerRationaleList.map(pr => pr.reason).slice(0, 3).join(' ')
+    : '';
+
+  const fullTextRationale = [teamRationale, activityRationale, playerRationaleSentence, concernSentence]
+    .filter(Boolean)
+    .join(' ');
+
+  return {
+    teamRationale,
+    activityRationale,
+    playerRationale: playerRationaleList,
+    fullTextRationale
+  };
 }
+
+/**
+ * Produces a short, plain-English explanation of why the plan looks the way it does.
+ */
+export function generateSessionRationale(
+  output: ClubRotationEngineOutput,
+  sessionObjectives: string[],
+  options: StructuredRationaleOptions = {}
+): string {
+  return generateStructuredRationale(output, sessionObjectives, options).fullTextRationale;
+}
+
 
 export function getPlanBalanceLabel(explainablePlanScore: number): string {
   if (explainablePlanScore >= 85) return 'Good balance — most players have similar opportunities.';
