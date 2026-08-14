@@ -155,3 +155,98 @@ export function findPlayersWithoutRecentObservations(
     .filter(p => !observedPlayerIds.has(p.id))
     .map(p => ({ playerId: p.id, playerName: p.name }));
 }
+
+import { RulesService } from '../competition-rules/application/rulesService';
+
+/**
+ * Answers a competition rule question grounded strictly in approved, active competition rules.
+ * Sourced directly from uploaded playing conditions with document/page citations (D-10, D-11).
+ */
+export function answerCompetitionRuleQuery(
+  context: { clubId: string; teamId?: string; seasonId: string; competitionId?: string },
+  questionText: string
+): { answer: string; isRuleSourced: boolean; citation?: string } {
+  return RulesService.answerRuleQuestion(context, questionText);
+}
+
+// ---------------------------------------------------------------------------
+// Open Q&A intent classifier
+// ---------------------------------------------------------------------------
+// Routes a coach's free-typed question to one of the grounded answer functions
+// above. Still fully deterministic — this is keyword/name matching, not an
+// LLM — so it can only ever point at real data or say it doesn't know.
+
+export type CoachAssistantIntent =
+  | { type: 'no_recent_batting' }
+  | { type: 'player_focus'; playerId: string; playerName: string }
+  | { type: 'player_focus_unresolved' }
+  | { type: 'workload_restrictions' }
+  | { type: 'focus_reviews_due' }
+  | { type: 'weekly_priorities' }
+  | { type: 'no_recent_observations' }
+  | { type: 'competition_rule'; questionText: string }
+  | { type: 'unrecognised' };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Finds the player whose first or last name appears as a whole word in the question, longest name first. */
+function findMentionedPlayer(questionText: string, players: Player[]): Player | undefined {
+  const lowerQ = questionText.toLowerCase();
+  return [...players]
+    .sort((a, b) => b.name.length - a.name.length)
+    .find(p =>
+      p.name
+        .toLowerCase()
+        .split(' ')
+        .some(part => part.length >= 3 && new RegExp(`\\b${escapeRegExp(part)}\\b`, 'i').test(lowerQ))
+    );
+}
+
+/**
+ * Classifies a free-typed coach question into a grounded intent. Never invents
+ * an answer — anything it can't confidently match falls through to
+ * 'unrecognised' so the UI can say so plainly instead of guessing.
+ */
+export function classifyCoachAssistantQuestion(questionText: string, players: Player[]): CoachAssistantIntent {
+  const q = questionText.toLowerCase().trim();
+  if (!q) return { type: 'unrecognised' };
+
+  if (q.includes('focus') || q.includes('working on') || q.includes('development')) {
+    const mentioned = findMentionedPlayer(questionText, players);
+    if (mentioned) return { type: 'player_focus', playerId: mentioned.id, playerName: mentioned.name };
+    if (!q.includes('due') && !q.includes('review')) return { type: 'player_focus_unresolved' };
+  }
+
+  if (q.includes('review') && (q.includes('focus') || q.includes('due'))) {
+    return { type: 'focus_reviews_due' };
+  }
+
+  if (q.includes('workload') || q.includes('restrict') || (q.includes('bowl') && (q.includes('limit') || q.includes('max')))) {
+    return { type: 'workload_restrictions' };
+  }
+
+  if (q.includes('priorit')) {
+    return { type: 'weekly_priorities' };
+  }
+
+  if (q.includes('observ')) {
+    return { type: 'no_recent_observations' };
+  }
+
+  if ((q.includes('bat') || q.includes('batting')) && (q.includes("hasn't") || q.includes('has not') || q.includes("haven't") || q.includes('who ') || q.includes('not batted'))) {
+    return { type: 'no_recent_batting' };
+  }
+
+  if (
+    q.includes('rule') || q.includes('law') || q.includes('allowed') || q.includes('legal') ||
+    q.includes('powerplay') || q.includes('circle') || q.includes('permitted') ||
+    (q.includes('overs') && q.includes('can')) || q.includes('playing condition')
+  ) {
+    return { type: 'competition_rule', questionText };
+  }
+
+  return { type: 'unrecognised' };
+}
+

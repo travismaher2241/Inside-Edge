@@ -6,7 +6,8 @@ import {
   findPlayersWithWorkloadRestrictions,
   findFocusesDueForReview,
   getWeeklyTrainingPriorities,
-  findPlayersWithoutRecentObservations
+  findPlayersWithoutRecentObservations,
+  classifyCoachAssistantQuestion
 } from '../src/modules/cricket/coachAssistantQueries';
 
 const player = (id: string, name: string): Player => ({
@@ -169,5 +170,65 @@ describe('findPlayersWithoutRecentObservations', () => {
     ];
     const gaps = findPlayersWithoutRecentObservations(players, observations, 14, NOW);
     expect(gaps.map(g => g.playerId)).toEqual(['p-2']);
+  });
+});
+
+describe('classifyCoachAssistantQuestion', () => {
+  const players = [
+    player('p-1', 'Ben Harris'),
+    player('p-2', 'Jack Davies'),
+    player('p-3', 'Will Taylor'),
+    player('p-4', 'Sam Miller')
+  ];
+
+  it('classifies batting-gap phrasing variants', () => {
+    expect(classifyCoachAssistantQuestion("Who hasn't batted in the last 7 days?", players)).toEqual({ type: 'no_recent_batting' });
+    expect(classifyCoachAssistantQuestion('Who has not batted this week', players)).toEqual({ type: 'no_recent_batting' });
+  });
+
+  it('matches a mentioned player name for a focus question, by first or last name', () => {
+    expect(classifyCoachAssistantQuestion("What's Ben Harris working on?", players)).toEqual({ type: 'player_focus', playerId: 'p-1', playerName: 'Ben Harris' });
+    expect(classifyCoachAssistantQuestion('Jack development focus', players)).toEqual({ type: 'player_focus', playerId: 'p-2', playerName: 'Jack Davies' });
+  });
+
+  it('falls back to player_focus_unresolved when no player name is present', () => {
+    expect(classifyCoachAssistantQuestion("What's the focus this week?", players)).toEqual({ type: 'player_focus_unresolved' });
+  });
+
+  it('does not let a common-word player name (e.g. "Will") leak into unrelated questions', () => {
+    expect(classifyCoachAssistantQuestion('Who hasn\'t batted this week?', players)).toEqual({ type: 'no_recent_batting' });
+  });
+
+  it('classifies workload phrasing', () => {
+    expect(classifyCoachAssistantQuestion('Who has a workload restriction?', players)).toEqual({ type: 'workload_restrictions' });
+    expect(classifyCoachAssistantQuestion('Is anyone bowling over their max?', players)).toEqual({ type: 'workload_restrictions' });
+  });
+
+  it('classifies focus-review-due phrasing', () => {
+    expect(classifyCoachAssistantQuestion('Which focuses are due for review?', players)).toEqual({ type: 'focus_reviews_due' });
+  });
+
+  it('classifies training-priorities phrasing', () => {
+    expect(classifyCoachAssistantQuestion("This week's top training priorities", players)).toEqual({ type: 'weekly_priorities' });
+  });
+
+  it('classifies missing-observation phrasing', () => {
+    expect(classifyCoachAssistantQuestion("Who hasn't had an observation logged recently?", players)).toEqual({ type: 'no_recent_observations' });
+  });
+
+  it('classifies competition-rule phrasing', () => {
+    expect(classifyCoachAssistantQuestion('How many overs can a bowler send down?', players)).toEqual({ type: 'competition_rule', questionText: 'How many overs can a bowler send down?' });
+    expect(classifyCoachAssistantQuestion('How many fielders are allowed outside the circle in the powerplay?', players)).toEqual({
+      type: 'competition_rule',
+      questionText: 'How many fielders are allowed outside the circle in the powerplay?'
+    });
+  });
+
+  it('falls back to unrecognised for a question matching no known intent', () => {
+    expect(classifyCoachAssistantQuestion('What is the weather like today?', players)).toEqual({ type: 'unrecognised' });
+  });
+
+  it('returns unrecognised for an empty question', () => {
+    expect(classifyCoachAssistantQuestion('   ', players)).toEqual({ type: 'unrecognised' });
   });
 });

@@ -526,6 +526,7 @@ export function App() {
           sessions={clubSessions}
           focuses={focuses}
           observations={observations}
+          activeScope={activeScope}
           onClose={() => setIsCoachAssistantOpen(false)}
         />
       )}
