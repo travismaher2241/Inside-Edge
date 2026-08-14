@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import type { DevelopmentFocus } from '../src/types/cricket';
 import { OnboardingService } from '../src/modules/onboarding/onboardingService';
 import { BetaDiagnostics, sanitizeContext, BETA_BUILD_VERSION } from '../src/modules/diagnostics/betaDiagnostics';
 import { ProblemReporter, generateErrorReference } from '../src/modules/diagnostics/problemReporter';
@@ -109,12 +110,25 @@ describe('Phase 2A — Refined Closed Beta Foundations (2A-01 to 2A-18)', () => 
   });
 
   it('2A-15: Coach can export scope-aware JSON data, sanitizing confidential notes for non-head-coaches', () => {
+    const confidentialFocus: DevelopmentFocus = {
+      id: 'f1',
+      playerId: 'p1',
+      focusStatement: 'Stance',
+      domain: 'Batting',
+      state: 'CURRENT',
+      startDate: '2026-01-01',
+      why: 'Head Coach Secret Note',
+      history: [],
+      coachSummary: 'Working on stance stability',
+      access: { staffVisibility: 'head_coach_only', shareWithPlayerGuardian: false }
+    };
+
     const headCoachBundle = DataExportService.generateExportBundle({
       exportingRole: 'head_coach',
       clubName: 'Western Park CC',
       players: [],
       matches: [],
-      focuses: [{ id: 'f1', playerId: 'p1', focusStatement: 'Stance', domain: 'Batting', state: 'ACTIVE', startDate: '2026-01-01', why: 'Head Coach Secret Note', isConfidential: true }],
+      focuses: [confidentialFocus],
       observations: [],
       sessions: []
     });
@@ -126,7 +140,7 @@ describe('Phase 2A — Refined Closed Beta Foundations (2A-01 to 2A-18)', () => 
       clubName: 'Western Park CC',
       players: [],
       matches: [],
-      focuses: [{ id: 'f1', playerId: 'p1', focusStatement: 'Stance', domain: 'Batting', state: 'ACTIVE', startDate: '2026-01-01', why: 'Head Coach Secret Note', isConfidential: true }],
+      focuses: [confidentialFocus],
       observations: [],
       sessions: []
     });
