@@ -186,26 +186,29 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
           Need an account? Ask your club Head Coach for an invite link.
         </div>
 
-        {/* Test Access (temporary, pre-launch) */}
-        <div style={{ textAlign: 'center', marginTop: '12px' }}>
-          <button
-            type="button"
-            onClick={() => onTestAccess && onTestAccess()}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <FlaskConical size={14} /> Tester
-          </button>
-        </div>
+        {/* Test access. The caller only supplies a handler on builds where it is
+            enabled, so the production site shows no way past this screen. */}
+        {onTestAccess && (
+          <div style={{ textAlign: 'center', marginTop: '12px' }}>
+            <button
+              type="button"
+              onClick={onTestAccess}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <FlaskConical size={14} /> Tester
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Forgot Password Modal */}

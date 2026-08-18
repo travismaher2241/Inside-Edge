@@ -9,7 +9,11 @@ import {
   Target,
   Users,
   AlertTriangle,
-  Flame
+  Flame,
+  MessageSquare,
+  Check,
+  X,
+  Sparkles
 } from 'lucide-react';
 
 interface PublicStationViewProps {
@@ -26,6 +30,13 @@ export const PublicStationView: React.FC<PublicStationViewProps> = ({ token }) =
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(12 * 60);
   const warnedAt = useRef<Set<number>>(new Set());
+
+  // Quick Observation State
+  const [observedPlayer, setObservedPlayer] = useState<PublicStationPlayer | null>(null);
+  const [selectedTag, setSelectedTag] = useState<'Good execution' | 'Needs work' | 'Decision' | 'Technique' | 'Intent' | 'Workload'>('Good execution');
+  const [noteText, setNoteText] = useState<string>('');
+  const [isSubmittingNote, setIsSubmittingNote] = useState<boolean>(false);
+  const [noteFeedback, setNoteFeedback] = useState<string | null>(null);
 
   // Load once, then poll the station-scoped public projection for coach changes.
   useEffect(() => {

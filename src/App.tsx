@@ -49,6 +49,13 @@ const PublicStationView = lazy(() => import('./views/PublicStationView').then(m 
 // Enable with VITE_FEATURE_RULES_INGESTION=true.
 const isRulesIngestionEnabled = import.meta.env.VITE_FEATURE_RULES_INGESTION === 'true';
 
+// Test access signs straight in as a head coach against a local-only repository, with
+// no Firestore reads or writes. It is always on while developing and can be switched on
+// for a preview deploy, but it stays out of the production bundle so the public site
+// does not offer a way past the sign-in screen.
+// Enable on a build with VITE_FEATURE_TEST_ACCESS=true.
+const isTestAccessEnabled = import.meta.env.DEV || import.meta.env.VITE_FEATURE_TEST_ACCESS === 'true';
+
 const TEST_ACCESS_COACH: CoachUser = {
   uid: 'test-access',
   email: 'tester@insideedge.local',
@@ -405,7 +412,7 @@ export function App() {
   }
 
   if (!isTestMode && (!authUser || !coachProfile) && !isLiveMode) {
-    return <LoginView onTestAccess={() => setIsTestMode(true)} />;
+    return <LoginView onTestAccess={isTestAccessEnabled ? () => setIsTestMode(true) : undefined} />;
   }
 
   // A signed-in Firebase user without a loaded coach profile is not the same
@@ -429,7 +436,7 @@ export function App() {
   }
 
   if (!isTestMode && (!authUser || !coachProfile)) {
-    return <LoginView onTestAccess={() => setIsTestMode(true)} />;
+    return <LoginView onTestAccess={isTestAccessEnabled ? () => setIsTestMode(true) : undefined} />;
   }
 
   if (isLiveMode && currentClubSession) {

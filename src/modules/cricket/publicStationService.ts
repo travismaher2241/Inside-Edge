@@ -282,4 +282,55 @@ export class PublicStationService {
     });
     await batch.commit();
   }
+
+  /**
+   * Allows unauthenticated station leaders to submit quick player notes directly from /station/:token.
+   */
+  static async submitStationObservation(options: {
+    token: string;
+    playerId: string;
+    noteText: string;
+    tags: Array<'Good execution' | 'Needs work' | 'Decision' | 'Technique' | 'Intent' | 'Workload' | 'Custom Note'>;
+    authorLeaderName?: string;
+  }): Promise<{ success: boolean; observationId: string }> {
+    const { token, playerId, noteText, tags, authorLeaderName } = options;
+    const projection = await this.resolveStationData(token);
+    const sessionId = projection?.sessionId || 'live-session';
+    const leaderName = authorLeaderName || projection?.leaderPlayer?.name || 'Station Leader';
+
+    const observationId = `obs-station-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const formattedText = noteText?.trim()
+      ? `[${leaderName} - ${projection?.resource.name || 'Station'}]: ${noteText.trim()}`
+      : `[${leaderName} - ${projection?.resource.name || 'Station'}]: Noted standout performance during drill.`;
+
+    const observation = {
+      id: observationId,
+      operationId: `op-${observationId}`,
+      playerId,
+      source: 'training' as const,
+      sessionId,
+      tags: tags.length > 0 ? tags : ['Good execution' as const],
+      textNote: formattedText,
+      linkedFocusIds: [],
+      access: { staffVisibility: 'all_coaches' as const, shareWithPlayerGuardian: false },
+      createdAt: new Date().toISOString(),
+      createdByUserId: `station:${leaderName.toLowerCase().replace(/\s+/g, '_')}`,
+      baseRevision: 1,
+      revision: 1
+    };
+
+    // Save to local storage cache
+    StorageEngine.addObservation(observation);
+
+    // Save to Firestore if available
+    if (isFirebaseConfigured) {
+      try {
+        await CloudStorageEngine.addObservation(observation);
+      } catch (err) {
+        console.warn('Could not write public station observation to Firestore, saved locally:', err);
+      }
+    }
+
+    return { success: true, observationId };
+  }
 }
