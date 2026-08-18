@@ -104,7 +104,7 @@ export const CentreWicketScenarioBuilder: React.FC<CentreWicketScenarioBuilderPr
 
   return (
     <div className="card" style={{ padding: '16px', borderLeft: '4px solid var(--accent-gold)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+      <div className="flex-between" style={{ marginBottom: '12px' }}>
         <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Target size={18} /> Centre-Wicket Scenario Builder
         </h3>

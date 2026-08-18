@@ -176,13 +176,12 @@ export const AcceptInviteView: React.FC<AcceptInviteViewProps> = ({ token, onAcc
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <User size={14} /> FULL NAME / DISPLAY NAME
             </label>
-            <input
+            <input className="form-input"
               type="text"
               required
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              placeholder="Coach Sarah Jenkins"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-elevated)', color: 'var(--text-main)', fontSize: '0.9rem' }}
+              placeholder="Coach Sarah Jenkins" 
             />
           </div>
 
@@ -190,13 +189,12 @@ export const AcceptInviteView: React.FC<AcceptInviteViewProps> = ({ token, onAcc
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <Mail size={14} /> EMAIL ADDRESS
             </label>
-            <input
+            <input className="form-input"
               type="email"
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="sarah@club.com"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-elevated)', color: 'var(--text-main)', fontSize: '0.9rem' }}
+              placeholder="sarah@club.com" 
             />
           </div>
 
@@ -204,13 +202,12 @@ export const AcceptInviteView: React.FC<AcceptInviteViewProps> = ({ token, onAcc
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <Lock size={14} /> CREATE PASSWORD
             </label>
-            <input
+            <input className="form-input"
               type="password"
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-elevated)', color: 'var(--text-main)', fontSize: '0.9rem' }}
+              placeholder="At least 6 characters" 
             />
           </div>
 
@@ -218,13 +215,12 @@ export const AcceptInviteView: React.FC<AcceptInviteViewProps> = ({ token, onAcc
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
               <Lock size={14} /> CONFIRM PASSWORD
             </label>
-            <input
+            <input className="form-input"
               type="password"
               required
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter password"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-elevated)', color: 'var(--text-main)', fontSize: '0.9rem' }}
+              placeholder="Re-enter password" 
             />
           </div>
 

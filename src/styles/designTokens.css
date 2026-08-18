@@ -1375,54 +1375,47 @@ input[type='checkbox'], input[type='radio'] { width: 20px; min-height: 20px; mar
 }
 
 /* ==========================================================================
-   Consolidated Utility Classes for Clean UI & Reduced Inline Styles
+   Shared UI patterns, extracted from repeated inline styles
    ========================================================================== */
 
+/* Gold uppercase label above a card section. */
 .section-label-gold {
   font-size: 0.75rem;
   font-weight: 800;
   color: var(--accent-gold);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* Title row with its action pushed to the right edge. */
+.flex-between {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 4px;
 }
 
-.card-compact {
-  padding: 12px 14px;
-  background: var(--bg-surface-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-}
-
+/* The same row used as the header of a bottom sheet or modal. */
 .sheet-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
+/* .card with the tighter padding the planner and profile views use.
+   Everything else (background, border, radius) already comes from .card. */
+.card-compact {
+  padding: 14px;
+}
+
+/* Standard text / select / textarea field. Focus styling stays with the
+   global input:focus-visible rule so the accessible outline is preserved. */
 .form-input {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
   background: var(--bg-surface-elevated);
   color: var(--text-main);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--accent-gold);
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-light);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
 }

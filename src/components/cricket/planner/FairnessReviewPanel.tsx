@@ -163,7 +163,7 @@ export const FairnessReviewPanel: React.FC<FairnessReviewPanelProps> = ({
                   onClick={() => setSelectedTeamId(t.id)}
                   style={{ cursor: 'pointer', padding: '14px', background: 'var(--bg-surface-card)', marginBottom: 0 }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="flex-between">
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Users size={16} color="var(--accent-gold)" /> {t.name}
@@ -337,7 +337,7 @@ export const FairnessReviewPanel: React.FC<FairnessReviewPanelProps> = ({
       {showHowItWorks && (
         <div className="bottom-sheet-overlay" onClick={() => setShowHowItWorks(false)}>
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>How Session Fairness is Calculated</h3>
               <button onClick={() => setShowHowItWorks(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
@@ -370,7 +370,7 @@ export const FairnessReviewPanel: React.FC<FairnessReviewPanelProps> = ({
       {selectedPlayerStatus && (
         <div className="bottom-sheet-overlay" onClick={() => setSelectedPlayerStatus(null)}>
           <div className="bottom-sheet-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <div>
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>{selectedPlayerStatus.player.name}</h3>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>

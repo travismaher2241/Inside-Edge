@@ -253,7 +253,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
       {/* Top Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="flex-between">
         <button
           onClick={onExitLive}
           style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
@@ -276,7 +276,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
 
       {/* Hero Timer Display */}
       <div className="live-timer-hero-v2">
-        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+        <div className="section-label-gold">
           BLOCK {activeBlockIdx + 1} OF {session.rotationPlan.length} ({currentBlockPlan?.startTime || '18:00'}–{currentBlockPlan?.endTime || '18:12'})
         </div>
 
@@ -317,7 +317,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
               className="live-area-card-v2"
               onClick={() => setExpandedAreaId(isExpanded ? null : resAssign.resourceId)}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="flex-between">
                 <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-gold)' }}>
                   {resAssign.resourceName}
                 </div>
@@ -472,7 +472,7 @@ export const LiveClubSession: React.FC<LiveClubSessionProps> = ({
       {showChangeModal && (
         <div className="bottom-sheet-overlay" onClick={() => setShowChangeModal(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="live-change-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <h3 id="live-change-title" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
                 ADJUST TRAINING
               </h3>

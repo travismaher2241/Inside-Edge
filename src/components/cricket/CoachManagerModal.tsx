@@ -75,7 +75,7 @@ export const CoachManagerModal: React.FC<CoachManagerModalProps> = ({ currentCoa
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="flex-between" style={{ marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase' }}>
               CLUB COACH MANAGEMENT

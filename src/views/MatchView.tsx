@@ -233,7 +233,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
       ) : (
         <>
           {/* Header & New Match Action */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex-between">
             <div>
               <h1 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Matches</h1>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
@@ -348,7 +348,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
           {activeSection === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div className="prep-checklist-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex-between">
                   <div>
                     <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>
                       {isCompleted
@@ -406,8 +406,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
                 </div>
               </div>
 
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   FIXTURE AT A GLANCE
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.82rem' }}>
@@ -423,7 +423,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
           {/* TAB 2: GAME PLAN */}
           {activeSection === 'plan' && (
             <div className="card" style={{ padding: '16px', background: 'var(--bg-surface-card)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div className="sheet-header">
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>GAME PLAN</h3>
                 <button className="btn btn-secondary" onClick={() => setIsPrepWizardOpen(true)} style={{ width: 'auto', padding: '0 10px', height: '32px', fontSize: '0.75rem' }}>
                   Edit Game Plan
@@ -432,7 +432,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem' }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  <div className="section-label-gold">
                     TEAM OBJECTIVES
                   </div>
                   {currentMatch.preMatchPlan.teamObjectives.length > 0 ? (
@@ -447,7 +447,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  <div className="section-label-gold">
                     BATTING STRATEGY
                   </div>
                   <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
@@ -456,7 +456,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  <div className="section-label-gold">
                     BOWLING STRATEGY
                   </div>
                   <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
@@ -465,7 +465,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  <div className="section-label-gold">
                     FIELDING FOCUS
                   </div>
                   <p style={{ color: 'var(--text-main)', background: 'var(--bg-surface-elevated)', padding: '10px', borderRadius: '8px', lineHeight: 1.4 }}>
@@ -480,8 +480,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
           {activeSection === 'review' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Match Result Input Bar */}
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   MATCH RESULT
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -591,7 +591,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
           {isAddObservationOpen && (
             <div className="bottom-sheet-overlay" onClick={() => setIsAddObservationOpen(false)}>
               <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div className="sheet-header">
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>ADD MATCH NOTE</h3>
                   <button onClick={() => setIsAddObservationOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
                     <X size={20} />
@@ -647,7 +647,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
           {isPrepWizardOpen && (
             <div className="bottom-sheet-overlay" onClick={() => setIsPrepWizardOpen(false)}>
               <div role="dialog" aria-modal="true" aria-labelledby="match-prep-wizard-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div className="flex-between" style={{ marginBottom: '16px' }}>
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>MATCH PREPARATION</div>
                     <h2 id="match-prep-wizard-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>v {currentMatch.opponent} — {workflowStatus.completedCount}/4 ready</h2>

@@ -63,7 +63,7 @@ export const BowlingProfileEditor: React.FC<BowlingProfileEditorProps> = ({ play
 
   return (
     <div className="card" style={{ marginTop: '16px', borderLeft: '4px solid var(--accent-gold)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+      <div className="flex-between" style={{ marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Target size={18} color="var(--accent-gold)" />
           <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-gold)' }}>

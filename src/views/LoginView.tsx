@@ -137,21 +137,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
               <Mail size={14} /> COACH EMAIL
             </label>
-            <input
+            <input className="form-input"
               type="email"
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="headcoach@club.com"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-light)',
-                background: 'var(--bg-surface-elevated)',
-                color: 'var(--text-main)',
-                fontSize: '0.9rem'
-              }}
+              placeholder="headcoach@club.com" 
             />
           </div>
 
@@ -171,21 +162,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
                 Forgot password?
               </button>
             </div>
-            <input
+            <input className="form-input"
               type="password"
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••••••"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-light)',
-                background: 'var(--bg-surface-elevated)',
-                color: 'var(--text-main)',
-                fontSize: '0.9rem'
-              }}
+              placeholder="••••••••••••" 
             />
           </div>
 
@@ -230,7 +212,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccess, onTestAccess })
       {isResetOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsResetOpen(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="reset-password-title" className="bottom-sheet-content" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div className="flex-between" style={{ marginBottom: '16px' }}>
               <div id="reset-password-title" style={{ fontSize: '1.1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Key size={18} color="var(--accent-gold)" /> Reset Password
               </div>

@@ -95,7 +95,7 @@ export const TrainingTemplateManager: React.FC<TrainingTemplateManagerProps> = (
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Compact Section Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="flex-between">
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Templates</h2>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>

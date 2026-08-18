@@ -182,7 +182,7 @@ export const QuickObservationModal: React.FC<QuickObservationModalProps> = ({
           gap: '12px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex-between">
           <div>
             <h3 id="obs-modal-title" style={{ fontSize: '1.05rem', fontWeight: 800 }}>
               📝 Add Note: {player.name}

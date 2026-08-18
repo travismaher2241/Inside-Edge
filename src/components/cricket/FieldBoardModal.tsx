@@ -210,7 +210,7 @@ export const FieldBoardModal: React.FC<FieldBoardModalProps> = ({
     <div className="bottom-sheet-overlay" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="field-board-title" className="bottom-sheet-content" style={{ maxHeight: '94vh', overflowY: 'auto', maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div className="flex-between" style={{ marginBottom: '10px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 800, textTransform: 'uppercase' }}>
               TACTICAL FIELD {bowlerName ? `• ${bowlerName}` : ''}

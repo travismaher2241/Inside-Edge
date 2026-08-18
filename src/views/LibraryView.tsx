@@ -235,7 +235,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               className="library-activity-card"
               onClick={() => setSelectedActivity(activity)}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="flex-between">
                 <span className="badge badge-gold">{activity.category}</span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   {activity.durationMinutes} min · {activity.spaceRequired.replace('_', ' ')}
@@ -315,7 +315,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             onClick={e => e.stopPropagation()}
             style={{ maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>FILTER ACTIVITIES</h2>
               <button aria-label="Close filter sheet" onClick={() => setIsFilterSheetOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
                 <X size={20} />
@@ -466,7 +466,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               ['Safety', selectedActivity.safetyNotes ? [selectedActivity.safetyNotes] : []]
             ].map(([title, values]) => (
               <section key={title as string} style={{ marginTop: '12px' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                <div className="section-label-gold">
                   {title}
                 </div>
                 {(values as string[]).length ? (

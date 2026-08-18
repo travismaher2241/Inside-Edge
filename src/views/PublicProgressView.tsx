@@ -74,7 +74,7 @@ export const PublicProgressView: React.FC<PublicProgressViewProps> = ({ token })
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
           <ShieldCheck size={20} style={{ color: 'var(--accent-gold)' }} />
-          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+          <span className="section-label-gold">
             Inside Edge · Player Progress Summary v{summary.version}
           </span>
         </div>
@@ -127,7 +127,7 @@ export const PublicProgressView: React.FC<PublicProgressViewProps> = ({ token })
                   borderRadius: '0 8px 8px 0'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex-between">
                   <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{f.focusStatement}</span>
                   <span className="badge badge-gold" style={{ fontSize: '0.68rem' }}>{f.state}</span>
                 </div>

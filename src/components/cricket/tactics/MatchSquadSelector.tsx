@@ -66,7 +66,7 @@ export const MatchSquadSelector: React.FC<MatchSquadSelectorProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Header & Status */}
       <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex-between">
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>STAGE 1: PLAYING XI SELECTION</div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginTop: '2px' }}>
@@ -146,7 +146,7 @@ export const MatchSquadSelector: React.FC<MatchSquadSelectorProps> = ({
                   position: 'relative'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex-between">
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: isSelected ? 'var(--accent-gold)' : '#fff' }}>
                     {p.name}
                   </div>

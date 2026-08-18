@@ -86,7 +86,7 @@ export const CoachAssistantPanel: React.FC<CoachAssistantPanelProps> = ({
         style={{ maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <div className="sheet-header">
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--accent-gold)', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <MessageCircleQuestion size={14} /> COACH ASSISTANT

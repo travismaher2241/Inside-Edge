@@ -193,7 +193,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {isClubView && !selectedPlayer && (
         <>
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex-between">
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Shield size={14} /> CLUB SQUADS
@@ -236,7 +236,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 onClick={() => setDrilledTeamId(team.id)}
                 style={{ cursor: 'pointer', padding: '14px', background: 'var(--bg-surface-card)', marginBottom: 0 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex-between">
                   <div>
                     <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Users size={16} color="var(--accent-gold)" />
@@ -274,7 +274,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {(!isClubView || searchQuery.trim()) && !selectedPlayer && (
         <>
           {/* Header & Back Button if Drilled */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex-between">
             <div>
               {drilledTeamId && (
                 <button
@@ -513,8 +513,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* TAB 1: OVERVIEW */}
           {profileTab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   PRIMARY TEAM & MEMBERSHIP
                 </div>
                 <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>
@@ -529,8 +529,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 </button>
               </div>
 
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   CURRENT FOCUS
                 </div>
                 {playerFocuses.length > 0 ? (
@@ -543,8 +543,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 )}
               </div>
 
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   RESTRICTIONS & WORKLOAD
                 </div>
                 {selectedPlayer.workloadRestriction?.restrictedBowler ? (
@@ -561,7 +561,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* TAB 2: DEVELOPMENT */}
           {profileTab === 'development' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="flex-between">
                 <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent-gold)' }}>DEVELOPMENT FOCUSES</span>
                 <button
                   className="btn btn-gold"
@@ -574,8 +574,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
               {playerFocuses.length > 0 ? (
                 playerFocuses.map(f => (
-                  <div key={f.id} className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={f.id} className="card card-compact">
+                    <div className="flex-between">
                       <span className="badge badge-gold">[{f.domain}]</span>
                       <select
                         value={f.state}
@@ -612,7 +612,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* TAB 3: OBSERVATIONS */}
           {profileTab === 'observations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="flex-between">
                 <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent-gold)' }}>OBSERVATIONS EVIDENCE</span>
                 <button
                   className="btn btn-secondary"
@@ -647,8 +647,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* TAB 4: SKILLS */}
           {profileTab === 'skills' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '6px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   BATTING & ROLE
                 </div>
                 <div style={{ fontSize: '0.88rem', fontWeight: 700 }}>{selectedPlayer.battingHand === 'right' ? 'Right-Hand Batter (RHB)' : 'Left-Hand Batter (LHB)'}</div>
@@ -667,8 +667,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   }}
                 />
               ) : (
-                <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                <div className="card card-compact">
+                  <div className="section-label-gold">
                     BOWLING PROFILE
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Does not bowl</div>
@@ -683,7 +683,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {isRoleSheetOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsRoleSheetOpen(false)}>
           <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>FILTER BY ROLE</h3>
               <button onClick={() => setIsRoleSheetOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
                 <X size={20} />
@@ -713,7 +713,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {isAddFocusOpen && selectedPlayer && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddFocusOpen(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="focus-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <div id="focus-dialog-title" style={{ fontSize: '1.1rem', fontWeight: 800 }}>
                 ADD DEVELOPMENT FOCUS
               </div>
@@ -768,7 +768,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
       {isAddPlayerOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddPlayerOpen(false)}>
           <div role="dialog" aria-modal="true" aria-labelledby="add-player-dialog-title" className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div className="sheet-header">
               <div id="add-player-dialog-title" style={{ fontSize: '1.1rem', fontWeight: 800 }}>Add Squad Player</div>
               <button aria-label="Close dialog" onClick={() => setIsAddPlayerOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
             </div>

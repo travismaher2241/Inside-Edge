@@ -57,7 +57,7 @@ export const BowlingPlanGenerator: React.FC<BowlingPlanGeneratorProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Header */}
       <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex-between">
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)' }}>STAGE 4: BOWLING PLANS & RECOMMENDATIONS</div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginTop: '2px' }}>

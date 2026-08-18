@@ -30,9 +30,9 @@ export const ScopeSelectorModal: React.FC<ScopeSelectorModalProps> = ({
         style={{ maxWidth: '480px' }}
       >
         {/* Modal Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <div className="sheet-header">
           <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+            <div className="section-label-gold">
               WORKING CONTEXT
             </div>
             <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>

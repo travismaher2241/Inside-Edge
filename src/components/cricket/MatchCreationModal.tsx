@@ -98,7 +98,7 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
         style={{ maxWidth: '640px', padding: '20px' }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="flex-between" style={{ marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-gold)', letterSpacing: '0.5px' }}>
               MATCH FIXTURE & PRE-MATCH PLAN
@@ -130,20 +130,11 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
             <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
               OPPONENT NAME
             </label>
-            <input
+            <input className="form-input"
               type="text"
               value={opponent}
               onChange={e => setOpponent(e.target.value)}
-              placeholder="e.g. Camberwell Magpies CC"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-light)',
-                background: 'var(--bg-surface-elevated)',
-                color: 'var(--text-main)',
-                fontSize: '0.9rem'
-              }}
+              placeholder="e.g. Camberwell Magpies CC" 
               required
             />
           </div>
@@ -153,19 +144,10 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <Calendar size={14} /> MATCH DATE
               </label>
-              <input
+              <input className="form-input"
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-light)',
-                  background: 'var(--bg-surface-elevated)',
-                  color: 'var(--text-main)',
-                  fontSize: '0.9rem'
-                }}
+                onChange={e => setDate(e.target.value)} 
                 required
               />
             </div>
@@ -174,20 +156,11 @@ export const MatchCreationModal: React.FC<MatchCreationModalProps> = ({
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                 <MapPin size={14} /> VENUE
               </label>
-              <input
+              <input className="form-input"
                 type="text"
                 value={venue}
                 onChange={e => setVenue(e.target.value)}
-                placeholder="e.g. Camberwell Sports Ground"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-light)',
-                  background: 'var(--bg-surface-elevated)',
-                  color: 'var(--text-main)',
-                  fontSize: '0.9rem'
-                }}
+                placeholder="e.g. Camberwell Sports Ground" 
                 required
               />
             </div>

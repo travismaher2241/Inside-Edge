@@ -111,7 +111,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
               {/* Session Activities Overview */}
               {activityBlocks.length > 0 && (
                 <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                  <div className="section-label-gold">
                     Activities ({activityBlocks.length})
                   </div>
                   {activityBlocks.slice(0, 3).map(block => (
@@ -137,7 +137,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
             </div>
           ) : (
             <div className="card" style={{ padding: '24px 16px', textAlign: 'center', background: 'var(--bg-surface-card)' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '4px' }}>
+              <div className="section-label-gold">
                 TRAINING
               </div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>No training planned</h3>

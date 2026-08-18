@@ -359,7 +359,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       >
         {/* Sticky Wizard Header */}
         <div className="wizard-sticky-header">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="flex-between">
             <div>
               <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
                 PLAN TRAINING
@@ -406,8 +406,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
           {/* STEP 1: Session Details & Scope */}
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   SESSION DETAILS
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -475,8 +475,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               </div>
 
               {/* Teams Selection */}
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   TEAMS INCLUDED
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -502,8 +502,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               </div>
 
               {/* Training Areas Selection */}
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
+              <div className="card card-compact">
+                <div className="section-label-gold">
                   TRAINING AREAS
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -533,10 +533,10 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Attendance Bar */}
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <div className="card card-compact">
+                <div className="flex-between" style={{ marginBottom: '10px' }}>
                   <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                    <div className="section-label-gold">
                       WHO'S HERE
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -627,9 +627,9 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
 
               {/* Live Generated Plan Preview */}
               <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)', borderLeft: '4px solid var(--accent-gold)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="flex-between">
                   <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                    <div className="section-label-gold">
                       GENERATED PLAN PREVIEW
                     </div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', marginTop: '2px' }}>

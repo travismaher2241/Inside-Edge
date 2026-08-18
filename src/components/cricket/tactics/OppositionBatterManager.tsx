@@ -109,7 +109,7 @@ export const OppositionBatterManager: React.FC<OppositionBatterManagerProps> = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       {/* Header & Add Batter Button */}
       <div className="card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex-between">
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)' }}>OPPONENT</div>
             <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginTop: '2px' }}>
@@ -268,7 +268,7 @@ export const OppositionBatterManager: React.FC<OppositionBatterManagerProps> = (
       {isAddBatterModalOpen && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddBatterModalOpen(false)}>
           <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div className="flex-between" style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{editingBatterId ? 'Edit Batter' : 'ADD BATTER'}</div>
               <button onClick={() => setIsAddBatterModalOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
             </div>
@@ -342,7 +342,7 @@ export const OppositionBatterManager: React.FC<OppositionBatterManagerProps> = (
       {isAddObsModalOpen && currentBatter && (
         <div className="bottom-sheet-overlay" onClick={() => setIsAddObsModalOpen(false)}>
           <div className="bottom-sheet-content" style={{ maxHeight: '90vh', overflowY: 'auto', maxWidth: '460px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div className="flex-between" style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>WHAT DID YOU NOTICE?</div>
               <button onClick={() => setIsAddObsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#fff' }}><X size={20} /></button>
             </div>
