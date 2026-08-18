@@ -28,7 +28,6 @@ import { LiveClubSession } from './components/cricket/planner/LiveClubSession';
 import { activityToClubBlock, selectCurrentClubSession } from './modules/cricket/sessionModel';
 import { completeSessionWithFairness } from './modules/cricket/clubRotationEngine';
 import { SyncOutboxEngine } from './modules/cricket/syncOutboxEngine';
-import { RulesManagementView } from './components/cricket/rules/RulesManagementView';
 import { ClubSetupWizard } from './components/onboarding/ClubSetupWizard';
 import { ReportProblemModal } from './components/diagnostics/ReportProblemModal';
 import { DataExportService } from './modules/export/dataExportService';
@@ -37,9 +36,17 @@ import { useToast } from './components/common/Toast';
 import { createCricketRepository } from './storage/CricketRepository';
 import { RepositoryProvider } from './storage/RepositoryContext';
 import { SEED_TEAM, SEED_PLAYERS, SEED_ACTIVITIES, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
+const RulesManagementView = lazy(() => import('./components/cricket/rules/RulesManagementView').then(m => ({ default: m.RulesManagementView })));
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const PublicRsvpView = lazy(() => import('./views/PublicRsvpView').then(m => ({ default: m.PublicRsvpView })));
 const PublicProgressView = lazy(() => import('./views/PublicProgressView').then(m => ({ default: m.PublicProgressView })));
+
+// Competition-rules ingestion — PDF/OCR extraction, confidence scoring,
+// versioning and approvals — is parked. It has no route into match planning
+// yet (fixtures still read the seeded CompetitionRulesProfile), so it ships
+// disabled and its chunk is only fetched when the flag is on.
+// Enable with VITE_FEATURE_RULES_INGESTION=true.
+const isRulesIngestionEnabled = import.meta.env.VITE_FEATURE_RULES_INGESTION === 'true';
 
 const TEST_ACCESS_COACH: CoachUser = {
   uid: 'test-access',
@@ -454,7 +461,7 @@ export function App() {
         currentCoach={effectiveCoachProfile}
         onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
         onOpenCoachAssistant={() => setIsCoachAssistantOpen(true)}
-        onOpenRulesManagement={() => setIsRulesManagementOpen(true)}
+        onOpenRulesManagement={isRulesIngestionEnabled ? () => setIsRulesManagementOpen(true) : undefined}
         onOpenReportProblem={() => setIsReportProblemOpen(true)}
         onExportData={handleExportData}
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
@@ -583,7 +590,7 @@ export function App() {
           />
         )}
 
-        {isRulesManagementOpen && (
+        {isRulesIngestionEnabled && isRulesManagementOpen && (
           <div className="bottom-sheet-overlay" onClick={() => setIsRulesManagementOpen(false)}>
             <div
               role="dialog"
@@ -602,10 +609,12 @@ export function App() {
                   Close Rules
                 </button>
               </div>
-              <RulesManagementView
-                teamId={activeScope.mode === 'team' ? activeScope.teamId : 'ct-1'}
-                userRole={effectiveCoachProfile?.role || 'head_coach'}
-              />
+              <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading competition rules…</div>}>
+                <RulesManagementView
+                  teamId={activeScope.mode === 'team' ? activeScope.teamId : 'ct-1'}
+                  userRole={effectiveCoachProfile?.role || 'head_coach'}
+                />
+              </Suspense>
             </div>
           </div>
         )}
