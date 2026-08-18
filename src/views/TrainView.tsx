@@ -11,7 +11,7 @@ interface TrainViewProps {
   currentSession?: ClubTrainingSession;
   fairnessLedger: RollingFairnessLedger[];
   savedClubTemplates: SavedClubTemplate[];
-  onSaveClubSession: (session: ClubTrainingSession) => void;
+  onSaveClubSession: (session: ClubTrainingSession) => void | Promise<void>;
   onSaveClubTemplate: (template: SavedClubTemplate) => void;
   onDeleteClubTemplate: (templateId: string) => void;
   onStartLiveSession: (session: ClubTrainingSession) => void;

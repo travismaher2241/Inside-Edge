@@ -1820,22 +1820,26 @@ export const SEED_SAVED_TEMPLATES: SavedClubTemplate[] = [
   {
     id: 'tmpl-1',
     name: 'Seniors Nets / Lower Grades Centre Wicket',
-    description: '1st XI & 2nd XI use Nets 1-3 for match prep. 3rd-5th XI use Centre Wicket scenario.',
+    description: '1st XI & 2nd XI use Nets 1-3 for match prep. 3rd-5th XI use Centre Wicket scenario and Fielding.',
     teamGroupRules: [
       { teamQuery: 'first_seconds', allocatedResourceType: 'pace_new_ball_net' },
       { teamQuery: 'remaining', allocatedResourceType: 'centre_wicket' }
     ],
+    includedTeamIds: ['ct-1', 'ct-2', 'ct-3', 'ct-4', 'ct-5'],
+    resourceTypeRules: ['pace_new_ball_net', 'spin_net', 'bowling_machine_net', 'centre_wicket', 'fielding_area'],
     rotationDurationMinutes: 12,
     sessionObjectives: ['New-ball decision making', 'Centre-wicket chase scenario']
   },
   {
     id: 'tmpl-2',
     name: '1st & 2nd XI Centre Wicket / Other Teams Nets',
-    description: 'Top two grades take centre wicket for T20 scenario. Lower grades rotate through nets.',
+    description: 'Top two grades take centre wicket for T20 scenario. Lower grades rotate through nets 1-3 and Fielding.',
     teamGroupRules: [
       { teamQuery: 'first_seconds', allocatedResourceType: 'centre_wicket' },
       { teamQuery: 'remaining', allocatedResourceType: 'standard_net' }
     ],
+    includedTeamIds: ['ct-1', 'ct-2', 'ct-3', 'ct-4', 'ct-5'],
+    resourceTypeRules: ['centre_wicket', 'pace_new_ball_net', 'spin_net', 'bowling_machine_net', 'fielding_area'],
     rotationDurationMinutes: 15,
     sessionObjectives: ['T20 Middle overs scenario', 'Net technical repetition']
   },
@@ -1843,9 +1847,12 @@ export const SEED_SAVED_TEMPLATES: SavedClubTemplate[] = [
     id: 'tmpl-3',
     name: 'All-Club Mixed Net Rotations',
     description: 'Whole club combined net rotations focusing on skill groups across teams.',
+    groupingStrategy: 'mixed',
     teamGroupRules: [
       { teamQuery: 'all', allocatedResourceType: 'standard_net' }
     ],
+    includedTeamIds: ['ct-1', 'ct-2', 'ct-3', 'ct-4', 'ct-5'],
+    resourceTypeRules: ['pace_new_ball_net', 'spin_net', 'bowling_machine_net', 'centre_wicket', 'fielding_area'],
     rotationDurationMinutes: 12,
     sessionObjectives: ['Cross-squad integration', 'Skill pod rotation']
   }
@@ -1859,4 +1866,3 @@ export const SEED_FAIRNESS_LEDGER: RollingFairnessLedger[] = SEED_PLAYERS.map(p 
   totalCentreWicketOvers: 2,
   accumulatedFairnessCreditMinutes: 0
 }));
-

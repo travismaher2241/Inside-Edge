@@ -274,10 +274,10 @@ export function App() {
     void repository.updatePlayer(updatedPlayer);
   };
 
-  const handleSaveClubSession = (updatedSession: ClubTrainingSession) => {
+  const handleSaveClubSession = async (updatedSession: ClubTrainingSession): Promise<void> => {
     setClubSessions(prev => [updatedSession, ...prev.filter(item => item.id !== updatedSession.id)]);
     setCurrentClubSessionId(updatedSession.id);
-    void repository.saveSession(updatedSession);
+    await repository.saveSession(updatedSession);
   };
 
   const handleSaveClubTemplate = (template: SavedClubTemplate) => {

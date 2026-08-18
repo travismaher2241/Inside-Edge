@@ -21,7 +21,7 @@ interface ClubTrainingPlannerProps {
   savedTemplates: SavedClubTemplate[];
   rollingLedger: RollingFairnessLedger[];
   currentSession?: ClubTrainingSession;
-  onSaveSession: (session: ClubTrainingSession) => void;
+  onSaveSession: (session: ClubTrainingSession) => void | Promise<void>;
   onStartLive: (session: ClubTrainingSession) => void;
   onSaveTemplate: (template: SavedClubTemplate) => void;
   onDeleteTemplate: (templateId: string) => void;
@@ -197,9 +197,11 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
           rollingLedger={rollingLedger}
           selectedTemplate={selectedTemplate}
           currentSession={currentSession}
+          onPersistDraft={onSaveSession}
           onFinalise={(session, action) => {
-            onSaveSession(session);
-            if (action === 'launch') onStartLive(session);
+            return Promise.resolve(onSaveSession(session)).then(() => {
+              if (action === 'launch') onStartLive(session);
+            });
           }}
           onSaveTemplate={onSaveTemplate}
           onClose={() => setIsWizardOpen(false)}

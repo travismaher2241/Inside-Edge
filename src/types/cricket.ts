@@ -513,6 +513,50 @@ export interface Activity {
 
 export type GroupingStrategy = 'graded' | 'mixed';
 
+export interface ClubTrainingGroup {
+  id: string;
+  name: string;
+  teamIds: string[];
+  resourceIds: string[];
+  leaderId?: string;
+  groupingStrategy?: GroupingStrategy;
+}
+
+export interface PlanValidationError {
+  code: string;
+  message: string;
+  blockIndex?: number;
+  resourceId?: string;
+  playerId?: string;
+}
+
+export interface PlanValidationWarning {
+  code: string;
+  message: string;
+  severity: 'low' | 'medium' | 'high';
+  requiresAcknowledgement?: boolean;
+}
+
+export interface PlanValidationMetrics {
+  totalAttendingPlayers: number;
+  totalBlocks: number;
+  minBattingMinutes: number;
+  medianBattingMinutes: number;
+  maxBattingMinutes: number;
+  battingOpportunityGapMinutes: number;
+  unassignedPlayerCount: number;
+  zeroBattingPlayerCount: number;
+  emptyAreaCount: number;
+}
+
+export interface RotationPlanValidationResult {
+  isValid: boolean;
+  canLaunch: boolean;
+  hardErrors: PlanValidationError[];
+  warnings: PlanValidationWarning[];
+  metrics: PlanValidationMetrics;
+}
+
 export interface SessionActivityInstance {
   activityId: string;
   selectedProgressionStage: ActivityProgressionStage;
@@ -778,6 +822,8 @@ export interface CentreWicketScenario {
   wicketkeeperId?: string;
   namedLeaderId?: string;
   assignments: CentreWicketRoleAssignment[];
+  /** Blocks this scenario should occupy. Defaults to the opening block only. */
+  blockIndexes?: number[];
 }
 
 export interface PriorityMatchup {
@@ -854,6 +900,7 @@ export interface ClubTrainingSession {
   activeRotationIndex: number;
   status: 'draft' | 'planned' | 'live' | 'completed';
   warnings: string[];
+  acknowledgedWarningCodes?: string[];
   rationale?: string;
   completedAt?: string;
   fairnessAppliedAt?: string;
@@ -865,6 +912,7 @@ export interface ClubTrainingSession {
   liveAttendance: Record<string, PlayerLiveAttendance>;
   currentLiveState?: LiveTimerState;
   actualParticipationOutcomes?: Record<string, { battingMinutes: number; deliveriesBowled: number; centreWicketOvers: number }>;
+  opportunityRecords?: PlayerSessionOpportunityRecord[];
 }
 
 export interface RsvpInvitation {
@@ -959,6 +1007,7 @@ export interface SavedClubTemplate {
   id: string;
   name: string;
   description: string;
+  groupingStrategy?: GroupingStrategy;
   teamGroupRules: Array<{
     teamQuery: 'all' | 'first_seconds' | 'remaining' | 'juniors' | 'seniors';
     allocatedResourceType: TrainingResourceType;

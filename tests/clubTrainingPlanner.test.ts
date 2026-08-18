@@ -138,6 +138,8 @@ describe('Club Training Planner engine', () => {
     const first = completeSessionWithFairness(session, data.players, []);
     const second = completeSessionWithFairness(first.session, data.players, first.ledger);
     expect(first.applied).toBe(true);
+    expect(first.session.opportunityRecords).toHaveLength(data.players.length);
+    expect(first.session.opportunityRecords?.every(record => record.sessionId === session.id && record.source === 'live_blocks')).toBe(true);
     expect(second.applied).toBe(false);
     expect(second.ledger).toEqual(first.ledger);
   });

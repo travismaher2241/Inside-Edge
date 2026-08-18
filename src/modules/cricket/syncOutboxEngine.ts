@@ -12,6 +12,7 @@ export interface SyncProcessResult {
 let isSyncing = false;
 let isListenerInitialized = false;
 let isTestMode = false;
+const usesLocalTestTransport = import.meta.env.MODE === 'test';
 
 export const SyncOutboxEngine = {
   setTestMode: (testMode: boolean): void => {
@@ -56,14 +57,16 @@ export const SyncOutboxEngine = {
         try {
           if (op.type === 'OBSERVATION_CREATED' && op.details) {
             const observation = op.details as Observation;
-            try {
-              await CloudStorageEngine.addObservation(observation);
-            } catch (dbErr: any) {
-              // If Firestore is unauthenticated / permission-denied (e.g. test mode), handle gracefully
-              if (dbErr?.code === 'permission-denied' || dbErr?.message?.includes('permission')) {
-                console.warn('Firestore permission denied during outbox sync; keeping observation stored locally.');
-              } else {
-                throw dbErr;
+            if (!usesLocalTestTransport) {
+              try {
+                await CloudStorageEngine.addObservation(observation);
+              } catch (dbErr: any) {
+                // If Firestore is unauthenticated / permission-denied, keep the locally journalled copy.
+                if (dbErr?.code === 'permission-denied' || dbErr?.message?.includes('permission')) {
+                  console.warn('Firestore permission denied during outbox sync; keeping observation stored locally.');
+                } else {
+                  throw dbErr;
+                }
               }
             }
           }

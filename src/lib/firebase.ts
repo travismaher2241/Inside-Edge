@@ -12,7 +12,11 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789:web:placeholder'
 };
 
-export const isFirebaseConfigured = Boolean(import.meta.env.VITE_FIREBASE_PROJECT_ID && import.meta.env.VITE_FIREBASE_PROJECT_ID !== 'placeholder-project-id');
+// Unit tests exercise the deterministic local-storage fallbacks. They must not
+// depend on a developer's Firebase env file or make live network calls.
+export const isFirebaseConfigured = import.meta.env.MODE !== 'test' && Boolean(
+  import.meta.env.VITE_FIREBASE_PROJECT_ID && import.meta.env.VITE_FIREBASE_PROJECT_ID !== 'placeholder-project-id'
+);
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
@@ -27,4 +31,3 @@ try {
 export const db = firestoreDb;
 
 export const storage = getStorage(app);
-

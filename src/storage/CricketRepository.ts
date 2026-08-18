@@ -119,8 +119,8 @@ abstract class BaseCricketRepository {
 
 /**
  * Test Access mode. Cloud-synced writes are deliberate no-ops — App.tsx keeps
- * those records in React state for the life of the session and drops them on
- * sign-out, which is what "test access" means here.
+ * most records in React state for the life of the session. Session drafts are
+ * local-only so RSVP links created during a demo can be opened and tested.
  */
 export class LocalCricketRepository extends BaseCricketRepository implements ICricketRepository {
   subscribeAll(_role: CoachRole, _handlers: RepositorySubscriptionHandlers): () => void {
@@ -135,7 +135,10 @@ export class LocalCricketRepository extends BaseCricketRepository implements ICr
   async addDevelopmentFocus(_focus: DevelopmentFocus): Promise<void> {}
   async updateDevelopmentFocus(_focus: DevelopmentFocus): Promise<void> {}
   async saveClubTeam(_team: ClubTeam): Promise<void> {}
-  async saveSession(_session: ClubTrainingSession): Promise<void> {}
+  async saveSession(session: ClubTrainingSession): Promise<void> {
+    // Keep demo plans local so RSVP links generated in Test Access can resolve.
+    StorageEngine.saveClubSession(session);
+  }
   async saveTemplate(_template: SavedClubTemplate): Promise<void> {}
   async deleteTemplate(_templateId: string): Promise<void> {}
   async saveFieldSetting(_setting: SavedFieldSetting): Promise<void> {}
