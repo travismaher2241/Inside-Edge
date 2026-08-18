@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Player, ClubTeam, ActiveScope } from '../src/types/cricket';
-import { getPlayersForScope, groupPlayersByTeam, getScopeLabel } from '../src/modules/cricket/scopeHelpers';
+import { getPlayersForScope, groupPlayersByTeam, getScopeLabel, getSessionsForScope, getMatchesForScope, getRecordsForPlayers } from '../src/modules/cricket/scopeHelpers';
 import { deriveSquadBalanceData } from '../src/components/cricket/planner/FairnessReviewPanel';
 
 const mockTeams: ClubTeam[] = [
@@ -105,5 +105,49 @@ describe('Club vs Team Scope Information Architecture Unit Tests', () => {
     expect(playerToMove.id).toBe('p1');
     expect(playerToMove.name).toBe('Ben Harris');
     expect(playerToMove.primaryTeamId).toBe('ct-2');
+  });
+// --- Scope applied to the rest of the app, not just the roster ---
+
+  it('TEST 7 — SESSIONS BY TEAM: A combined session stays visible from every team it includes', () => {
+    const sessions = [
+      { id: 's1', includedTeamIds: ['ct-1'] },
+      { id: 's2', includedTeamIds: ['ct-1', 'ct-2'] },
+      { id: 's3', includedTeamIds: ['ct-3'] },
+      { id: 's4', includedTeamIds: [] }
+    ] as unknown as Parameters<typeof getSessionsForScope>[0];
+
+    const ct1 = getSessionsForScope(sessions, { mode: 'team', teamId: 'ct-1' }).map(s => s.id);
+    expect(ct1).toEqual(['s1', 's2', 's4']);
+
+    const ct2 = getSessionsForScope(sessions, { mode: 'team', teamId: 'ct-2' }).map(s => s.id);
+    expect(ct2).toEqual(['s2', 's4']);
+
+    expect(getSessionsForScope(sessions, { mode: 'club' })).toHaveLength(4);
+  });
+
+  it('TEST 8 — MATCHES BY TEAM: Untagged legacy fixtures fall back to the founding team', () => {
+    const matches = [
+      { id: 'm1', teamId: 'ct-1' },
+      { id: 'm2', teamId: 'ct-2' },
+      { id: 'm3' }
+    ] as unknown as Parameters<typeof getMatchesForScope>[0];
+
+    expect(getMatchesForScope(matches, { mode: 'team', teamId: 'ct-1' }).map(m => m.id)).toEqual(['m1', 'm3']);
+    expect(getMatchesForScope(matches, { mode: 'team', teamId: 'ct-2' }).map(m => m.id)).toEqual(['m2']);
+    expect(getMatchesForScope(matches, { mode: 'club' })).toHaveLength(3);
+  });
+
+  it('TEST 9 — FOCUSES & OBSERVATIONS FOLLOW THE PLAYER: Records outside the scoped squad are hidden', () => {
+    const records = [
+      { id: 'f1', playerId: 'p1' },
+      { id: 'f2', playerId: 'p3' },
+      { id: 'f3', playerId: 'p4' }
+    ];
+
+    const ct1Players = getPlayersForScope(mockPlayers, { mode: 'team', teamId: 'ct-1' });
+    expect(getRecordsForPlayers(records, ct1Players).map(r => r.id)).toEqual(['f1']);
+
+    const clubPlayers = getPlayersForScope(mockPlayers, { mode: 'club' });
+    expect(getRecordsForPlayers(records, clubPlayers)).toHaveLength(3);
   });
 });

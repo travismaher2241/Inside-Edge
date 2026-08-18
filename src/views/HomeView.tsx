@@ -318,7 +318,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onNavigateToLibrary
 }) => {
   const isClubView = activeScope.mode === 'club';
-  const scopePlayers = getPlayersForScope(players, activeScope);
+  // players arrive already narrowed to the active scope by App
   const teamGroups = groupPlayersByTeam(clubTeams, players);
 
   const homeState = deriveHomeState({
@@ -502,7 +502,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
               <h2 className="home-primary-title">{homeState.primarySession.title}</h2>
               <div className="home-primary-meta">
-                <span>{scopePlayers.length} Team Players</span>
+                <span>{players.length} Team Players</span>
               </div>
               <div className="home-primary-actions" style={{ marginTop: '12px' }}>
                 <button className="btn btn-primary" onClick={onStartLiveSession}>

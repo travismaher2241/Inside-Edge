@@ -10,6 +10,7 @@ import {
 import { seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
 import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusLifecycleState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting, ActiveScope } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
+import { getPlayersForScope, getSessionsForScope, getMatchesForScope, getRecordsForPlayers } from './modules/cricket/scopeHelpers';
 import { AppShell } from './components/layout/AppShell';
 import type { TabType } from './components/layout/AppShell';
 import { HomeView } from './views/HomeView';
@@ -156,27 +157,49 @@ export function App() {
     });
   }, [authUser, coachProfile, repository]);
 
-  const currentClubSession = useMemo(
-    () => selectCurrentClubSession(clubSessions, currentClubSessionId),
-    [clubSessions, currentClubSessionId]
+  // Everything the shell renders sees data already narrowed to the active
+  // scope, so no view has to decide for itself what "current team" means.
+  // Two things stay club-wide on purpose: the drill library, because a drill
+  // belongs to the club rather than a squad, and the training planner's player
+  // list, because a session can deliberately span several teams.
+  const scopedPlayers = useMemo(
+    () => getPlayersForScope(players, activeScope),
+    [players, activeScope]
   );
 
-  // Compute team-scoped or club-wide matches based on activeScope
-  const filteredMatches = useMemo<MatchRecord[]>(() => {
-    if (activeScope.mode === 'team') {
-      return matches.filter(m => m.teamId === activeScope.teamId || (!m.teamId && activeScope.teamId === 'ct-1'));
-    }
-    return matches;
-  }, [matches, activeScope]);
+  const scopedFocuses = useMemo(
+    () => getRecordsForPlayers(focuses, scopedPlayers),
+    [focuses, scopedPlayers]
+  );
+
+  const scopedObservations = useMemo(
+    () => getRecordsForPlayers(observations, scopedPlayers),
+    [observations, scopedPlayers]
+  );
+
+  const scopedSessions = useMemo(
+    () => getSessionsForScope(clubSessions, activeScope),
+    [clubSessions, activeScope]
+  );
+
+  const scopedMatches = useMemo(
+    () => getMatchesForScope(matches, activeScope),
+    [matches, activeScope]
+  );
+
+  const currentClubSession = useMemo(
+    () => selectCurrentClubSession(scopedSessions, currentClubSessionId),
+    [scopedSessions, currentClubSessionId]
+  );
 
   // Compute current active match for HomeView and default MatchView selection
   const activeMatch = useMemo<MatchRecord>(() => {
     if (selectedMatchId) {
-      const target = filteredMatches.find(m => m.id === selectedMatchId);
+      const target = scopedMatches.find(m => m.id === selectedMatchId);
       if (target) return target;
     }
-    return getActiveMatch(filteredMatches) || filteredMatches[0];
-  }, [filteredMatches, selectedMatchId]);
+    return getActiveMatch(scopedMatches) || scopedMatches[0];
+  }, [scopedMatches, selectedMatchId]);
 
   // Save handlers. Each updates React state optimistically and hands persistence
   // to the repository, which no-ops in Test Access mode.
@@ -205,11 +228,11 @@ export function App() {
       exportingRole: role,
       clubName: team?.name || 'Inside Edge Cricket Club',
       team,
-      players,
-      matches: filteredMatches,
-      focuses,
-      observations,
-      sessions: clubSessions
+      players: scopedPlayers,
+      matches: scopedMatches,
+      focuses: scopedFocuses,
+      observations: scopedObservations,
+      sessions: scopedSessions
     });
     DataExportService.downloadJsonExport(bundle);
     showToast('Club data export downloaded.', 'success');
@@ -441,10 +464,10 @@ export function App() {
           <HomeView
             session={currentClubSession}
             match={activeMatch}
-            matches={filteredMatches}
-            sessions={clubSessions}
-            players={players}
-            focuses={focuses}
+            matches={scopedMatches}
+            sessions={scopedSessions}
+            players={scopedPlayers}
+            focuses={scopedFocuses}
             resources={trainingResources}
             team={team}
             clubTeams={clubTeams}
@@ -478,11 +501,12 @@ export function App() {
 
         {activeTab === 'team' && (
           <TeamView
-            players={players}
+            players={scopedPlayers}
             clubTeams={clubTeams}
             activeScope={activeScope}
-            focuses={focuses}
-            observations={observations}
+            onSelectScope={setActiveScope}
+            focuses={scopedFocuses}
+            observations={scopedObservations}
             session={currentClubSession}
             onUpdateSession={handleSaveClubSession}
             onOpenQuickObservation={p => setObservedPlayer(p)}
@@ -496,8 +520,8 @@ export function App() {
 
         {activeTab === 'match' && (
           <MatchView
-            matches={filteredMatches}
-            players={players}
+            matches={scopedMatches}
+            players={scopedPlayers}
             clubTeams={clubTeams}
             activeScope={activeScope}
             selectedMatchId={activeMatch?.id}
@@ -550,10 +574,10 @@ export function App() {
 
         {isCoachAssistantOpen && (
           <CoachAssistantPanel
-            players={players}
-            sessions={clubSessions}
-            focuses={focuses}
-            observations={observations}
+            players={scopedPlayers}
+            sessions={scopedSessions}
+            focuses={scopedFocuses}
+            observations={scopedObservations}
             activeScope={activeScope}
             onClose={() => setIsCoachAssistantOpen(false)}
           />

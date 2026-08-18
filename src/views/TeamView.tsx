@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Player, DevelopmentFocus, Observation, ObservationAttachment, DevelopmentDomain, FocusLifecycleState, PrimaryRole, BowlingStyle, ClubTrainingSession, ClubTeam, ActiveScope } from '../types/cricket';
 import { getRoleBadgeLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
-import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
+import { groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
 import { getAttachmentDownloadUrl } from '../modules/cricket/mediaStorageEngine';
 import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
@@ -38,6 +38,7 @@ interface TeamViewProps {
   players: Player[];
   clubTeams?: ClubTeam[];
   activeScope?: ActiveScope;
+  onSelectScope: (scope: ActiveScope) => void;
   focuses: DevelopmentFocus[];
   observations: Observation[];
   session?: ClubTrainingSession;
@@ -63,6 +64,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   players,
   clubTeams = [],
   activeScope = { mode: 'team', teamId: 'ct-1' },
+  onSelectScope,
   focuses,
   observations,
   session: _session,
@@ -73,9 +75,6 @@ export const TeamView: React.FC<TeamViewProps> = ({
   onAddPlayer,
   onUpdatePlayer
 }) => {
-  // Drilled Team inside Club View (if user tapped a team in Club View)
-  const [drilledTeamId, setDrilledTeamId] = useState<string | null>(null);
-
   // Level 1 vs Level 2 View State
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [profileTab, setProfileTab] = useState<'overview' | 'development' | 'observations' | 'skills'>('overview');
@@ -101,17 +100,10 @@ export const TeamView: React.FC<TeamViewProps> = ({
   const [newBowlingStyle, setNewBowlingStyle] = useState<BowlingStyle>('does_not_bowl');
   const [newBattingHand, setNewBattingHand] = useState<'right' | 'left'>('right');
 
-  // Effective working scope: if user drilled into a specific team in Club view, use that teamId
-  const effectiveScope: ActiveScope = drilledTeamId
-    ? { mode: 'team', teamId: drilledTeamId }
-    : activeScope;
+  const isClubView = activeScope.mode === 'club' && !searchQuery.trim();
 
-  const isClubView = activeScope.mode === 'club' && !drilledTeamId && !searchQuery.trim();
-
-  // Players filtered by current team or global scope
-  const scopePlayers = getPlayersForScope(players, effectiveScope);
-
-  const visiblePlayers = scopePlayers.filter(player =>
+  // Players arrive already narrowed to the active scope by App.
+  const visiblePlayers = players.filter(player =>
     (roleFilter === 'all' || player.primaryRole === roleFilter) &&
     (!searchQuery.trim() || `${player.name} ${player.preferredName || ''}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   );
@@ -157,7 +149,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
 
   const handleCreatePlayer = () => {
     if (!newPlayerName.trim()) return;
-    const targetTeamId = effectiveScope.teamId || clubTeams[0]?.id || 'ct-1';
+    const targetTeamId = activeScope.teamId || clubTeams[0]?.id || 'ct-1';
     const newPlayer: Player = {
       id: `p-${Date.now()}`,
       name: newPlayerName.trim(),
@@ -233,7 +225,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
               <div
                 key={team.id}
                 className="card"
-                onClick={() => setDrilledTeamId(team.id)}
+                onClick={() => onSelectScope({ mode: 'team', teamId: team.id })}
                 style={{ cursor: 'pointer', padding: '14px', background: 'var(--bg-surface-card)', marginBottom: 0 }}
               >
                 <div className="flex-between">
@@ -276,16 +268,16 @@ export const TeamView: React.FC<TeamViewProps> = ({
           {/* Header & Back Button if Drilled */}
           <div className="flex-between">
             <div>
-              {drilledTeamId && (
+              {activeScope.mode === 'team' && clubTeams.length > 1 && (
                 <button
-                  onClick={() => setDrilledTeamId(null)}
+                  onClick={() => onSelectScope({ mode: 'club' })}
                   style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}
                 >
-                  <ArrowLeft size={14} /> Back to All Teams
+                  <ArrowLeft size={14} /> All teams
                 </button>
               )}
               <h1 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
-                {drilledTeamId ? (clubTeams.find(t => t.id === drilledTeamId)?.name || 'Team Roster') : 'Squad Roster'}
+                {clubTeams.find(t => t.id === activeScope.teamId)?.name || 'Squad Roster'}
               </h1>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                 {visiblePlayers.length} players shown
