@@ -19,8 +19,9 @@ import {
 } from '../../../modules/cricket/clubRotationEngine';
 import { CentreWicketScenarioBuilder } from './CentreWicketScenarioBuilder';
 import { RsvpInvitationService } from '../../../modules/cricket/rsvpInvitationService';
+import { PublicStationService } from '../../../modules/cricket/publicStationService';
 import { useToast } from '../../common/Toast';
-import { AlertTriangle, ChevronDown, ChevronUp, X, Link, Copy, Play } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, X, Link, Copy, Play, MessageSquare, Share2, Shield } from 'lucide-react';
 
 interface ClubSessionWizardProps {
   teams: ClubTeam[];
@@ -771,6 +772,111 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 onSaveScenario={setCentreWicketScenario}
               />
             )}
+
+            {/* Station Delegation & WhatsApp Sharing for Captains */}
+            <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
+              <div className="section-label-gold" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Share2 size={12} /> DELEGATE STATIONS TO CAPTAINS & LEADERS
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px', marginBottom: '10px' }}>
+                Send live mobile station cards to captains running individual nets or centre wicket. No login required.
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {activeResources.map(res => {
+                  const firstBlockAssignment = engineOutput?.rotationBlocks[0]?.resourceAssignments.find(a => a.resourceId === res.id);
+                  const leaderId = firstBlockAssignment?.leaderId;
+                  const leaderPlayer = leaderId ? players.find(p => p.id === leaderId) : undefined;
+
+                  return (
+                    <div
+                      key={res.id}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'var(--bg-surface-elevated)', borderRadius: '6px' }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#fff' }}>
+                          {res.name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                          {leaderPlayer ? (
+                            <span style={{ color: '#fde047', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <Shield size={10} /> Leader: {leaderPlayer.name}
+                            </span>
+                          ) : (
+                            <span>Capacity: {res.maxBatters}B · {res.maxBowlers}BW</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={async () => {
+                            try {
+                              const savedDraft = await persistDraftForInvitation();
+                              const link = await PublicStationService.getShareableStationLink(sessionId, res.id, {
+                                session: savedDraft,
+                                players,
+                                resources
+                              });
+                              if (navigator.clipboard) await navigator.clipboard.writeText(link);
+                              showToast(`Copied live station link for ${res.name}!`, 'success');
+                            } catch (err: any) {
+                              showToast(err.message || 'Error generating station link.', 'error');
+                            }
+                          }}
+                          style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title={`Copy direct link for ${res.name}`}
+                        >
+                          <Link size={12} /> Link
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-gold"
+                          onClick={async () => {
+                            try {
+                              const savedDraft = await persistDraftForInvitation();
+                              const link = await PublicStationService.getShareableStationLink(sessionId, res.id, {
+                                session: savedDraft,
+                                players,
+                                resources
+                              });
+                              const scenarioDesc = centreWicketScenario?.targetRuns && res.supportsCentreWicket
+                                ? `Chase ${centreWicketScenario.targetRuns} off ${centreWicketScenario.targetOversOrBalls || 24} balls`
+                                : undefined;
+
+                              const brief = PublicStationService.getStationWhatsAppBrief({
+                                clubName: 'Inside Edge Cricket Club',
+                                sessionTitle: title,
+                                date,
+                                time: `${startTime}–${finishTime}`,
+                                resourceName: res.name,
+                                leaderName: leaderPlayer?.name,
+                                objectives: sessionObjectives,
+                                scenarioDescription: scenarioDesc,
+                                shareableLink: link
+                              });
+
+                              const encoded = encodeURIComponent(brief);
+                              window.open(`https://wa.me/?text=${encoded}`, '_blank');
+                              showToast(`Prepared WhatsApp brief for ${res.name}!`, 'success');
+                            } catch (err: any) {
+                              showToast(err.message || 'Error preparing WhatsApp brief.', 'error');
+                            }
+                          }}
+                          style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title={`Send WhatsApp brief for ${res.name}`}
+                        >
+                          <MessageSquare size={12} /> WhatsApp
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Collapsible Rotation Blocks */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

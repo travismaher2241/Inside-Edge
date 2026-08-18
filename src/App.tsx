@@ -40,6 +40,7 @@ const RulesManagementView = lazy(() => import('./components/cricket/rules/RulesM
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const PublicRsvpView = lazy(() => import('./views/PublicRsvpView').then(m => ({ default: m.PublicRsvpView })));
 const PublicProgressView = lazy(() => import('./views/PublicProgressView').then(m => ({ default: m.PublicProgressView })));
+const PublicStationView = lazy(() => import('./views/PublicStationView').then(m => ({ default: m.PublicStationView })));
 
 // Competition-rules ingestion — PDF/OCR extraction, confidence scoring,
 // versioning and approvals — is parked. It has no route into match planning
@@ -274,6 +275,11 @@ export function App() {
     void repository.updatePlayer(updatedPlayer);
   };
 
+  const handleBulkAddPlayers = (allPlayersToSave: Player[]) => {
+    setPlayers(allPlayersToSave);
+    void repository.savePlayers(allPlayersToSave);
+  };
+
   const handleSaveClubSession = async (updatedSession: ClubTrainingSession): Promise<void> => {
     setClubSessions(prev => [updatedSession, ...prev.filter(item => item.id !== updatedSession.id)]);
     setCurrentClubSessionId(updatedSession.id);
@@ -316,14 +322,19 @@ export function App() {
     handleSaveClubSession({ ...currentClubSession, blocks: currentClubSession.blocks.filter(block => block.activityId !== activityId) });
   };
 
-  const handleCompleteSession = () => {
+  const handleCompleteSession = async (): Promise<void> => {
     if (currentClubSession) {
       const completed = completeSessionWithFairness(currentClubSession, players, fairnessLedger);
-      handleSaveClubSession(completed.session);
       if (completed.applied) {
+        try {
+          await repository.completeSessionWithFairness(completed.session, completed.ledger);
+        } catch (error) {
+          showToast('Could not save the completed session and fairness ledger. Live mode remains open so you can retry.', 'error');
+          throw error;
+        }
         setFairnessLedger(completed.ledger);
-        void repository.saveFairnessLedger(completed.ledger);
       }
+      setClubSessions(previous => [completed.session, ...previous.filter(item => item.id !== completed.session.id)]);
       setCurrentClubSessionId(undefined);
     }
     setIsLiveMode(false);
@@ -370,6 +381,16 @@ export function App() {
     return (
       <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Player Progress Report...</div>}>
         <PublicProgressView token={progressToken} />
+      </Suspense>
+    );
+  }
+
+  // Route check 5: Public Station Leader Page (/station/:token) — No login required
+  if (pathname.startsWith('/station/')) {
+    const stationToken = pathname.replace('/station/', '').trim();
+    return (
+      <Suspense fallback={<div style={{ padding: '24px', color: 'var(--text-main)', textAlign: 'center' }}>Loading Station Schedule...</div>}>
+        <PublicStationView token={stationToken} />
       </Suspense>
     );
   }
@@ -521,6 +542,7 @@ export function App() {
             onUpdateDevelopmentFocusState={handleUpdateDevelopmentFocusState}
             onAddPlayer={handleAddPlayer}
             onUpdatePlayer={handleUpdatePlayer}
+            onBulkAddPlayers={handleBulkAddPlayers}
           />
 
         )}

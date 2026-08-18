@@ -74,6 +74,7 @@ export interface ICricketRepository {
   // Cloud-synced writes
   addPlayer(player: Player): Promise<void>;
   updatePlayer(player: Player): Promise<void>;
+  savePlayers(players: Player[]): Promise<void>;
   addMatch(match: MatchRecord): Promise<void>;
   updateMatch(match: MatchRecord): Promise<void>;
   addObservation(observation: Observation): Promise<void>;
@@ -86,6 +87,7 @@ export interface ICricketRepository {
   saveFieldSetting(setting: SavedFieldSetting): Promise<void>;
   deleteFieldSetting(settingId: string): Promise<void>;
   saveFairnessLedger(ledger: RollingFairnessLedger[]): Promise<void>;
+  completeSessionWithFairness(session: ClubTrainingSession, ledger: RollingFairnessLedger[]): Promise<void>;
 }
 
 /** Local-only entities behave identically in both modes. */
@@ -129,6 +131,7 @@ export class LocalCricketRepository extends BaseCricketRepository implements ICr
 
   async addPlayer(_player: Player): Promise<void> {}
   async updatePlayer(_player: Player): Promise<void> {}
+  async savePlayers(_players: Player[]): Promise<void> {}
   async addMatch(_match: MatchRecord): Promise<void> {}
   async updateMatch(_match: MatchRecord): Promise<void> {}
   async addObservation(_observation: Observation): Promise<void> {}
@@ -143,7 +146,13 @@ export class LocalCricketRepository extends BaseCricketRepository implements ICr
   async deleteTemplate(_templateId: string): Promise<void> {}
   async saveFieldSetting(_setting: SavedFieldSetting): Promise<void> {}
   async deleteFieldSetting(_settingId: string): Promise<void> {}
-  async saveFairnessLedger(_ledger: RollingFairnessLedger[]): Promise<void> {}
+  async saveFairnessLedger(ledger: RollingFairnessLedger[]): Promise<void> {
+    StorageEngine.saveFairnessLedger(ledger);
+  }
+  async completeSessionWithFairness(session: ClubTrainingSession, ledger: RollingFairnessLedger[]): Promise<void> {
+    StorageEngine.saveClubSession(session);
+    StorageEngine.saveFairnessLedger(ledger);
+  }
 }
 
 /** Signed-in mode. Cloud-synced writes go to Firestore. */
@@ -171,6 +180,9 @@ export class CloudCricketRepository extends BaseCricketRepository implements ICr
   }
   async updatePlayer(player: Player): Promise<void> {
     await CloudStorageEngine.updatePlayer(player);
+  }
+  async savePlayers(players: Player[]): Promise<void> {
+    await CloudStorageEngine.savePlayers(players);
   }
   async addMatch(match: MatchRecord): Promise<void> {
     await CloudStorageEngine.addMatch(match);
@@ -207,6 +219,9 @@ export class CloudCricketRepository extends BaseCricketRepository implements ICr
   }
   async saveFairnessLedger(ledger: RollingFairnessLedger[]): Promise<void> {
     await CloudStorageEngine.saveFairnessLedger(ledger);
+  }
+  async completeSessionWithFairness(session: ClubTrainingSession, ledger: RollingFairnessLedger[]): Promise<void> {
+    await CloudStorageEngine.completeClubSessionWithFairness(session, ledger);
   }
 }
 

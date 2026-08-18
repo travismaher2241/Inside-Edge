@@ -527,6 +527,20 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
 
   const matchupHistory = new Set<string>();
 
+  completedBlocks.forEach(block => {
+    block.resourceAssignments.forEach(assignment => {
+      assignment.batterPlayerIds.forEach(bId => {
+        sessionBattingMinutesMap.set(bId, (sessionBattingMinutesMap.get(bId) || 0) + block.durationMinutes);
+      });
+      assignment.bowlerPodPlayerIds.forEach(bwId => {
+        deliveriesBowledMap.set(bwId, (deliveriesBowledMap.get(bwId) || 0) + 12);
+        assignment.batterPlayerIds.forEach(bId => {
+          matchupHistory.add(`${bId}_${bwId}`);
+        });
+      });
+    });
+  });
+
   // Resolve groups
   const resolvedGroups = resolveTrainingGroups({
     teams,
@@ -1508,17 +1522,16 @@ export function recalculateFutureRotations(
 ): ClubTrainingSession {
   const completedBlocks = currentSession.rotationPlan.slice(0, activeBlockIndex + 1);
 
-  const activeResources = allResources.filter(r => currentSession.availableResourceIds.includes(r.id));
+  const activeResources = allResources.filter(r =>
+    currentSession.availableResourceIds?.length
+      ? currentSession.availableResourceIds.includes(r.id)
+      : r.active !== false
+  );
   const remainingBlocksCount = currentSession.rotationPlan.length - (activeBlockIndex + 1);
 
   if (remainingBlocksCount <= 0) {
     return currentSession;
   }
-
-  // Calculate remaining session window
-  const activeBlock = currentSession.rotationPlan[activeBlockIndex];
-  const nextStartMins = timeToMinutes(activeBlock ? activeBlock.endTime : currentSession.startTime);
-  const finishMins = timeToMinutes(currentSession.finishTime);
 
   const output = generateClubRotationPlan({
     resources: activeResources,
@@ -1528,25 +1541,30 @@ export function recalculateFutureRotations(
     staffAssignments: currentSession.staffPlayerAssignments,
     sessionObjectives: currentSession.sessionObjectives,
     rotationBlockDurationMinutes: currentSession.rotationDurationMinutes,
-    sessionStartTime: minutesToTime(nextStartMins),
-    sessionFinishTime: minutesToTime(finishMins),
-    manualLocks: currentSession.manualLocks
+    sessionStartTime: currentSession.startTime,
+    sessionFinishTime: currentSession.finishTime,
+    manualLocks: currentSession.manualLocks,
+    completedBlocks,
+    groupingStrategy: currentSession.defaultGroupingStrategy || 'graded',
+    centreWicketScenario: currentSession.rotationPlan[0]?.resourceAssignments.find(r => r.centreWicketScenario)?.centreWicketScenario
   });
 
   const roleArrays: Array<keyof Pick<AllocationResourceAssignment, 'batterPlayerIds' | 'bowlerPodPlayerIds' | 'wicketkeeperPlayerIds' | 'feederPlayerIds' | 'fieldingPlayerIds' | 'restPlayerIds'>> = [
     'batterPlayerIds', 'bowlerPodPlayerIds', 'wicketkeeperPlayerIds', 'feederPlayerIds', 'fieldingPlayerIds', 'restPlayerIds'
   ];
-  const futureBlocks = output.rotationBlocks.map((generatedBlock, offset) => {
-    const absoluteIndex = activeBlockIndex + 1 + offset;
-    const oldBlock = currentSession.rotationPlan[absoluteIndex];
-    const block = { ...generatedBlock, blockIndex: absoluteIndex, blockId: oldBlock?.blockId || `block-${absoluteIndex + 1}` };
+
+  const fullPlan = output.rotationBlocks.map((block, bIndex) => {
+    if (bIndex <= activeBlockIndex) {
+      return completedBlocks[bIndex] || block;
+    }
+    const oldBlock = currentSession.rotationPlan[bIndex];
     if (!oldBlock) return block;
 
     const assignments = block.resourceAssignments.map(assignment => ({ ...assignment }));
     oldBlock.resourceAssignments.forEach(oldAssignment => {
       roleArrays.forEach(roleKey => {
         oldAssignment[roleKey].forEach(playerId => {
-          if (!currentSession.manualLocks[`${absoluteIndex}_${oldAssignment.resourceId}_${playerId}`]) return;
+          if (!currentSession.manualLocks[`${bIndex}_${oldAssignment.resourceId}_${playerId}`]) return;
           assignments.forEach(assignment => {
             roleArrays.forEach(key => {
               assignment[key] = assignment[key].filter(id => id !== playerId);
@@ -1563,7 +1581,7 @@ export function recalculateFutureRotations(
 
   return {
     ...currentSession,
-    rotationPlan: [...completedBlocks, ...futureBlocks],
+    rotationPlan: fullPlan,
     warnings: output.warnings
   };
 }
@@ -1620,7 +1638,16 @@ export function handleLiveNoShow(
   const updatedSession = {
     ...session,
     availabilityRecords: updatedAvailability,
-    expectedPlayerIds: session.expectedPlayerIds.filter(id => id !== playerId)
+    expectedPlayerIds: session.expectedPlayerIds.filter(id => id !== playerId),
+    confirmedAttendingPlayerIds: session.confirmedAttendingPlayerIds.filter(id => id !== playerId),
+    liveAttendance: {
+      ...session.liveAttendance,
+      [playerId]: {
+        playerId,
+        status: 'live_absent' as const,
+        changedAt: new Date().toISOString()
+      }
+    }
   };
 
   return recalculateFutureRotations(updatedSession, activeBlockIndex, allPlayers, allTeams, allResources);
@@ -1647,9 +1674,54 @@ export function handleLiveLateArrival(
 
   const updatedSession = {
     ...session,
-    availabilityRecords: updatedAvailability
+    availabilityRecords: updatedAvailability,
+    expectedPlayerIds: [...new Set([...session.expectedPlayerIds, playerId])],
+    confirmedAttendingPlayerIds: [...new Set([...session.confirmedAttendingPlayerIds, playerId])],
+    liveAttendance: {
+      ...session.liveAttendance,
+      [playerId]: {
+        playerId,
+        status: 'present' as const,
+        actualArrivedAt: arrivalTimeStr,
+        changedAt: new Date().toISOString()
+      }
+    }
   };
 
+  return recalculateFutureRotations(updatedSession, activeBlockIndex, allPlayers, allTeams, allResources);
+}
+
+export function handleLiveEarlyDeparture(
+  session: ClubTrainingSession,
+  playerId: string,
+  departureTimeStr: string,
+  activeBlockIndex: number,
+  allPlayers: Player[],
+  allTeams: ClubTeam[],
+  allResources: TrainingResource[]
+): ClubTrainingSession {
+  const existing = session.availabilityRecords[playerId] || { playerId, status: 'attending' as const };
+  const updatedSession: ClubTrainingSession = {
+    ...session,
+    availabilityRecords: {
+      ...session.availabilityRecords,
+      [playerId]: {
+        ...existing,
+        status: 'attending',
+        expectedDepartureTime: departureTimeStr,
+        leaveEarly: true
+      }
+    },
+    liveAttendance: {
+      ...session.liveAttendance,
+      [playerId]: {
+        playerId,
+        status: 'left_early',
+        actualLeftAt: departureTimeStr,
+        changedAt: new Date().toISOString()
+      }
+    }
+  };
   return recalculateFutureRotations(updatedSession, activeBlockIndex, allPlayers, allTeams, allResources);
 }
 
@@ -1681,7 +1753,16 @@ export function handleLiveInjury(
 
   const updatedSession = {
     ...session,
-    staffPlayerAssignments: updatedStaff
+    staffPlayerAssignments: updatedStaff,
+    liveAttendance: {
+      ...session.liveAttendance,
+      [playerId]: {
+        playerId,
+        status: 'injured' as const,
+        injuryNotes,
+        changedAt: new Date().toISOString()
+      }
+    }
   };
 
   return recalculateFutureRotations(updatedSession, activeBlockIndex, allPlayers, allTeams, allResources);
@@ -1697,7 +1778,32 @@ export function calculateSessionFairness(
 ): SessionFairnessRecord[] {
   const records: SessionFairnessRecord[] = [];
 
-  players.forEach(p => {
+  const participantIds = new Set<string>([
+    ...session.expectedPlayerIds,
+    ...session.confirmedAttendingPlayerIds,
+    ...Object.entries(session.availabilityRecords)
+      .filter(([, record]) => record.status !== 'not_attending')
+      .map(([playerId]) => playerId)
+  ]);
+  session.rotationPlan.forEach(block => block.resourceAssignments.forEach(assignment => {
+    [
+      ...assignment.batterPlayerIds,
+      ...assignment.bowlerPodPlayerIds,
+      ...assignment.wicketkeeperPlayerIds,
+      ...assignment.feederPlayerIds,
+      ...assignment.fieldingPlayerIds,
+      ...assignment.restPlayerIds
+    ].forEach(playerId => participantIds.add(playerId));
+  }));
+  Object.values(session.availabilityRecords).forEach(record => {
+    if (record.status === 'not_attending') participantIds.delete(record.playerId);
+  });
+  Object.values(session.liveAttendance || {}).forEach(record => {
+    if (record.status === 'live_absent') participantIds.delete(record.playerId);
+    else participantIds.add(record.playerId);
+  });
+
+  players.filter(player => participantIds.has(player.id)).forEach(p => {
     let plannedBattingMins = 0;
     let deliveries = 0;
     let centreOvers = 0;
@@ -1711,7 +1817,7 @@ export function calculateSessionFairness(
           deliveries += 12;
         }
         if (res.centreWicketScenario) {
-          const cwAss = res.centreWicketScenario.assignments.find(a => a.playerId === p.id);
+          const cwAss = res.centreWicketScenario.assignments?.find(a => a.playerId === p.id);
           if (cwAss && cwAss.role === 'bowler') {
             centreOvers += 1;
           }
@@ -1761,7 +1867,7 @@ export function updateRollingFairnessLedger(
         totalBattingMinutes: existing.totalBattingMinutes + rec.actualBattingMinutes,
         totalDeliveriesBowled: existing.totalDeliveriesBowled + rec.deliveriesBowled,
         totalCentreWicketOvers: existing.totalCentreWicketOvers + rec.centreWicketOvers,
-        accumulatedFairnessCreditMinutes: Math.round((existing.accumulatedFairnessCreditMinutes + rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10
+        accumulatedFairnessCreditMinutes: Math.max(0, Math.round((existing.accumulatedFairnessCreditMinutes + rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10)
       };
     } else {
       updated.push({
@@ -1770,7 +1876,7 @@ export function updateRollingFairnessLedger(
         totalBattingMinutes: rec.actualBattingMinutes,
         totalDeliveriesBowled: rec.deliveriesBowled,
         totalCentreWicketOvers: rec.centreWicketOvers,
-        accumulatedFairnessCreditMinutes: Math.round((rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10
+        accumulatedFairnessCreditMinutes: Math.max(0, Math.round((rec.missedOrShortenedMinutes - rec.extraBattingMinutesGranted) * 10) / 10)
       });
     }
   });
@@ -1786,7 +1892,12 @@ export function completeSessionWithFairness(
 ): { session: ClubTrainingSession; ledger: RollingFairnessLedger[]; applied: boolean } {
   if (session.fairnessAppliedAt) return { session, ledger, applied: false };
   const completedSession: ClubTrainingSession = { ...session, status: 'completed', completedAt, fairnessAppliedAt: completedAt, currentLiveState: undefined };
-  completedSession.opportunityRecords = FairnessEngine.generateSessionOpportunityRecords(completedSession, players);
   const records = calculateSessionFairness(completedSession, players);
+  completedSession.actualParticipationOutcomes = Object.fromEntries(records.map(record => [record.playerId, {
+    battingMinutes: record.actualBattingMinutes,
+    deliveriesBowled: record.deliveriesBowled,
+    centreWicketOvers: record.centreWicketOvers
+  }]));
+  completedSession.opportunityRecords = FairnessEngine.generateSessionOpportunityRecords(completedSession, players);
   return { session: completedSession, ledger: updateRollingFairnessLedger(ledger, records), applied: true };
 }

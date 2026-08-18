@@ -149,6 +149,10 @@ export const CloudStorageEngine = {
     const snap = await getDoc(doc(db, 'players', playerId));
     return snap.exists() ? (snap.data() as Player) : null;
   },
+  getPlayers: async (): Promise<Player[]> => {
+    const snap = await getDocs(collection(db, 'players'));
+    return snap.docs.map(item => item.data() as Player);
+  },
 
   // Activities
   subscribeToActivities: (callback: (activities: Activity[]) => void): (() => void) => {
@@ -249,6 +253,10 @@ export const CloudStorageEngine = {
   saveTrainingResource: async (resource: TrainingResource): Promise<void> => {
     await setDoc(doc(db, 'trainingResources', resource.id), resource);
   },
+  getTrainingResources: async (): Promise<TrainingResource[]> => {
+    const snap = await getDocs(collection(db, 'trainingResources'));
+    return snap.docs.map(item => item.data() as TrainingResource);
+  },
 
   subscribeToClubSessions: (callback: (sessions: ClubTrainingSession[]) => void): (() => void) =>
     onSnapshot(collection(db, 'clubTrainingSessions'), snap => callback(snap.docs.map(item => item.data() as ClubTrainingSession))),
@@ -264,6 +272,15 @@ export const CloudStorageEngine = {
     onSnapshot(collection(db, 'fairnessLedger'), snap => callback(snap.empty ? SEED_FAIRNESS_LEDGER : snap.docs.map(item => item.data() as RollingFairnessLedger))),
   saveFairnessLedger: async (ledger: RollingFairnessLedger[]): Promise<void> => {
     const batch = writeBatch(db);
+    ledger.forEach(entry => batch.set(doc(db, 'fairnessLedger', entry.playerId), entry));
+    await batch.commit();
+  },
+  completeClubSessionWithFairness: async (
+    session: ClubTrainingSession,
+    ledger: RollingFairnessLedger[]
+  ): Promise<void> => {
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'clubTrainingSessions', session.id), session);
     ledger.forEach(entry => batch.set(doc(db, 'fairnessLedger', entry.playerId), entry));
     await batch.commit();
   },

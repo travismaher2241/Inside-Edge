@@ -4,8 +4,9 @@ import type { Player, DevelopmentFocus, Observation, ObservationAttachment, Deve
 import { getRoleBadgeLabel, DEVELOPMENT_DOMAINS, FOCUS_STATES } from '../modules/cricket/taxonomy';
 import { groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
 import { getAttachmentDownloadUrl } from '../modules/cricket/mediaStorageEngine';
-import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
+import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield, Upload } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
+import { RosterImportModal } from '../components/cricket/RosterImportModal';
 
 const ObservationClipPlayer: React.FC<{ attachment: ObservationAttachment }> = ({ attachment }) => {
   const [url, setUrl] = useState<string | null>(null);
@@ -48,6 +49,7 @@ interface TeamViewProps {
   onUpdateDevelopmentFocusState: (focusId: string, newState: FocusLifecycleState) => void;
   onAddPlayer: (player: Player) => void;
   onUpdatePlayer: (player: Player) => void;
+  onBulkAddPlayers?: (players: Player[]) => void;
 }
 
 const ROLES: Array<{ value: PrimaryRole | 'all'; label: string }> = [
@@ -73,7 +75,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
   onAddDevelopmentFocus,
   onUpdateDevelopmentFocusState,
   onAddPlayer,
-  onUpdatePlayer
+  onUpdatePlayer,
+  onBulkAddPlayers
 }) => {
   // Level 1 vs Level 2 View State
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -88,6 +91,7 @@ export const TeamView: React.FC<TeamViewProps> = ({
   const [isAddFocusOpen, setIsAddFocusOpen] = useState<boolean>(false);
   const [isAddPlayerOpen, setIsAddPlayerOpen] = useState<boolean>(false);
   const [isTeamTransferOpen, setIsTeamTransferOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   // Focus Form State
   const [focusDomain, setFocusDomain] = useState<DevelopmentDomain>('Batting');
@@ -194,13 +198,23 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 {clubTeams.length} Teams · {players.length} Players
               </h1>
             </div>
-            <button
-              className="btn btn-gold"
-              onClick={() => setIsAddPlayerOpen(true)}
-              style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
-            >
-              <Plus size={16} /> Add Player
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setIsImportModalOpen(true)}
+                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Bulk Import Squad Roster from CSV / PlayHQ"
+              >
+                <Upload size={14} /> Import CSV
+              </button>
+              <button
+                className="btn btn-gold"
+                onClick={() => setIsAddPlayerOpen(true)}
+                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={16} /> Add Player
+              </button>
+            </div>
           </div>
 
           {/* Club-Wide Player Search */}
@@ -283,13 +297,23 @@ export const TeamView: React.FC<TeamViewProps> = ({
                 {visiblePlayers.length} players shown
               </div>
             </div>
-            <button
-              className="btn btn-gold"
-              onClick={() => setIsAddPlayerOpen(true)}
-              style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem' }}
-            >
-              <Plus size={16} /> Add Player
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setIsImportModalOpen(true)}
+                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Bulk Import Squad Roster from CSV / PlayHQ"
+              >
+                <Upload size={14} /> Import CSV
+              </button>
+              <button
+                className="btn btn-gold"
+                onClick={() => setIsAddPlayerOpen(true)}
+                style={{ width: 'auto', padding: '0 12px', height: '36px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Plus size={16} /> Add Player
+              </button>
+            </div>
           </div>
 
           {/* Search & Filter Controls */}
@@ -883,6 +907,23 @@ export const TeamView: React.FC<TeamViewProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Bulk Roster Import Modal */}
+      {isImportModalOpen && (
+        <RosterImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          clubTeams={clubTeams}
+          existingPlayers={players}
+          onImportSuccess={(importedPlayers) => {
+            if (onBulkAddPlayers) {
+              onBulkAddPlayers(importedPlayers);
+            } else {
+              importedPlayers.forEach(p => onAddPlayer(p));
+            }
+          }}
+        />
       )}
     </div>
   );

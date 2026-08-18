@@ -87,6 +87,12 @@ service cloud.firestore {
       allow get: if true;
       allow list, create, update, delete: if isAssistantOrHeadCoach();
     }
+    // Opaque, non-enumerable station invitations contain only a station-scoped
+    // projection. Captains may fetch the one document named by their token hash.
+    match /stationInvitations/{tokenHash} {
+      allow get: if true;
+      allow list, create, update, delete: if isAssistantOrHeadCoach();
+    }
     match /fairnessLedger/{playerId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /savedClubTemplates/{templateId} { allow read, write: if isAssistantOrHeadCoach(); }
     match /savedFieldSettings/{settingId} { allow read, write: if isAssistantOrHeadCoach(); }
