@@ -303,9 +303,19 @@ export const PublicStationView: React.FC<PublicStationViewProps> = ({ token }) =
                       </div>
                     </div>
                   </div>
-                  <span style={{ fontSize: '0.7rem', background: '#1e293b', padding: '2px 8px', borderRadius: '4px', color: '#cbd5e1' }}>
-                    Batting
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setObservedPlayer(p || { id: pId, name: pId, primaryRole: 'top_order_batter', battingHand: 'right', bowlingStyle: 'does_not_bowl' })}
+                      style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '4px', padding: '2px 8px', color: '#fde047', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}
+                      title="Log Observation / Standout"
+                    >
+                      <MessageSquare size={12} /> Note
+                    </button>
+                    <span style={{ fontSize: '0.7rem', background: '#1e293b', padding: '2px 8px', borderRadius: '4px', color: '#cbd5e1' }}>
+                      Batting
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -334,11 +344,21 @@ export const PublicStationView: React.FC<PublicStationViewProps> = ({ token }) =
                       {p?.bowlingStyle.replace(/_/g, ' ') || 'Bowler'}
                     </div>
                   </div>
-                  {p?.workloadRestriction?.restrictedBowler && (
-                    <span style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px' }}>
-                      Restricted ({p.workloadRestriction.maxDeliveries || 24} balls)
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {p?.workloadRestriction?.restrictedBowler && (
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#fca5a5', padding: '2px 6px', borderRadius: '4px' }}>
+                        Restricted ({p.workloadRestriction.maxDeliveries || 24}b)
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setObservedPlayer(p || { id: pId, name: pId, primaryRole: 'pace_bowler', battingHand: 'right', bowlingStyle: 'right_arm_fast_medium' })}
+                      style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '4px', padding: '2px 8px', color: '#7dd3fc', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}
+                      title="Log Observation / Standout"
+                    >
+                      <MessageSquare size={12} /> Note
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -401,6 +421,146 @@ export const PublicStationView: React.FC<PublicStationViewProps> = ({ token }) =
       <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#64748b', marginTop: '12px', padding: '8px 0' }}>
         Inside Edge Cricket Coaching App · Station Delegation Mode
       </div>
+
+      {/* Quick Note Modal for Station Leader */}
+      {observedPlayer && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '12px', padding: '20px', maxWidth: '440px', width: '100%', color: '#fff', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--accent-gold, #f59e0b)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Sparkles size={14} /> Log Station Observation
+                </div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 900, marginTop: '2px' }}>
+                  {observedPlayer.name}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setObservedPlayer(null)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {noteFeedback ? (
+              <div style={{ padding: '14px', borderRadius: '8px', background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: '#86efac', fontSize: '0.85rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <Check size={16} /> {noteFeedback}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* 1-Tap Tag Pills */}
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                    SELECT OBSERVATION TAG:
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                    {[
+                      { tag: 'Good execution' as const, label: '🔥 Bowling Heat / Great Strike' },
+                      { tag: 'Intent' as const, label: '🎯 High Intent & Positive' },
+                      { tag: 'Decision' as const, label: '⚡ Ready for Higher Grade' },
+                      { tag: 'Technique' as const, label: '🧤 Sharp Form / Technical' },
+                      { tag: 'Needs work' as const, label: '⚠️ Needs Technical Work' },
+                      { tag: 'Workload' as const, label: '🩹 Soreness / Workload' }
+                    ].map(({ tag, label }) => {
+                      const isSel = selectedTag === tag;
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setSelectedTag(tag)}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            textAlign: 'left',
+                            background: isSel ? 'var(--accent-gold, #f59e0b)' : '#1e293b',
+                            color: isSel ? '#000' : '#e2e8f0',
+                            border: isSel ? '1px solid #f59e0b' : '1px solid #334155',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Optional Short Note */}
+                <div>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                    QUICK NOTE FOR HEAD COACH (OPTIONAL):
+                  </label>
+                  <input
+                    type="text"
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    placeholder="e.g. Looked rapid in 2nd spell, hit the splice repeatedly"
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', background: '#0f172a', color: '#fff', border: '1px solid #334155', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setObservedPlayer(null)}
+                    style={{ width: 'auto', padding: '0 14px', height: '34px', fontSize: '0.78rem' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-gold"
+                    onClick={async () => {
+                      if (!observedPlayer) return;
+                      setIsSubmittingNote(true);
+                      try {
+                        const result = await PublicStationService.submitStationObservation({
+                          token,
+                          playerId: observedPlayer.id,
+                          noteText,
+                          tags: [selectedTag],
+                          authorLeaderName: stationData?.leaderPlayer?.name
+                        });
+                        if (!result.success) {
+                          // The coach is the whole point of the note, so say plainly when
+                          // it did not reach them rather than showing a false tick.
+                          setNoteFeedback(result.error || 'Could not send note — please try again.');
+                          return;
+                        }
+                        setNoteFeedback(result.deliveredToCoach
+                          ? 'Sent to your Head Coach.'
+                          : 'Saved on this phone.');
+                        setTimeout(() => {
+                          setObservedPlayer(null);
+                          setNoteText('');
+                          setNoteFeedback(null);
+                        }, 1200);
+                      } catch (err) {
+                        console.error('Failed to submit station note:', err);
+                        setNoteFeedback('Could not save note — please try again.');
+                      } finally {
+                        setIsSubmittingNote(false);
+                      }
+                    }}
+                    disabled={isSubmittingNote}
+                    style={{ width: 'auto', padding: '0 18px', height: '34px', fontSize: '0.78rem', fontWeight: 800 }}
+                  >
+                    {isSubmittingNote ? 'Saving...' : 'Send to Head Coach'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

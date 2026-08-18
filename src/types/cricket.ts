@@ -150,6 +150,11 @@ export interface Observation {
   baseRevision: number;
   revision: number;
   syncStatus?: 'synced' | 'pending';
+  /**
+   * Set only on notes submitted from /station/:token by a leader with no account.
+   * Firestore uses it to authorise the write against a live station invitation.
+   */
+  stationTokenHash?: string;
 }
 
 export type FocusLifecycleState = 'CURRENT' | 'DEVELOPING' | 'CONSISTENT' | 'STRENGTH' | 'ARCHIVED';

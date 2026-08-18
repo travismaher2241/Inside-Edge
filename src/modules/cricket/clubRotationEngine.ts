@@ -481,7 +481,7 @@ export function generateClubRotationPlan(options: ClubRotationEngineOptions): Cl
   const blockDurations = buildBlockDurations(totalMins, blockMins);
   const totalBlocksCount = blockDurations.length;
 
-  const activeResources = resources.filter(r => r.active);
+  const activeResources = resources.filter(r => r.active !== false);
   const leaderIds = new Set((teams || []).flatMap(team => [...(team.captainIds || []), ...(team.coachIds || [])]));
   const warnings: string[] = [];
   const unsatisfiedSoftConstraints: string[] = [];
@@ -1901,3 +1901,64 @@ export function completeSessionWithFairness(
   completedSession.opportunityRecords = FairnessEngine.generateSessionOpportunityRecords(completedSession, players);
   return { session: completedSession, ledger: updateRollingFairnessLedger(ledger, records), applied: true };
 }
+
+/**
+ * Clones and advances an existing club training session by 7 days to generate the next recurring weekly session.
+ * Automatically runs the rotation engine with latest rolling fairness ledger deficits so under-allocated players
+ * get prioritized in the new session.
+ */
+export function generateNextWeeklySession(options: {
+  currentSession: ClubTrainingSession;
+  allPlayers: Player[];
+  allResources: TrainingResource[];
+  clubTeams: ClubTeam[];
+  rollingFairnessLedger?: RollingFairnessLedger[];
+}): ClubTrainingSession {
+  const { currentSession, allPlayers, allResources, clubTeams, rollingFairnessLedger = [] } = options;
+
+  let nextDate = new Date();
+  if (currentSession.date) {
+    const parsed = new Date(currentSession.date);
+    if (!Number.isNaN(parsed.getTime())) {
+      parsed.setDate(parsed.getDate() + 7);
+      nextDate = parsed;
+    }
+  } else {
+    const day = nextDate.getDay();
+    const daysUntilThursday = (4 + 7 - day) % 7 || 7;
+    nextDate.setDate(nextDate.getDate() + daysUntilThursday);
+  }
+
+  const nextDateStr = nextDate.toISOString().split('T')[0];
+  const newSessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  const activeResources = allResources.filter(r => currentSession.availableResourceIds.includes(r.id));
+  const activeTeams = clubTeams.filter(t => currentSession.includedTeamIds.includes(t.id));
+  const activePlayers = allPlayers.filter(p => p.primaryTeamId && currentSession.includedTeamIds.includes(p.primaryTeamId));
+
+  const rotationOutput = generateClubRotationPlan({
+    teams: activeTeams.length > 0 ? activeTeams : clubTeams,
+    players: activePlayers.length > 0 ? activePlayers : allPlayers,
+    resources: activeResources.length > 0 ? activeResources : allResources,
+    availability: currentSession.availabilityRecords || {},
+    staffAssignments: currentSession.staffPlayerAssignments || {},
+    sessionObjectives: currentSession.sessionObjectives || [],
+    rotationBlockDurationMinutes: currentSession.rotationDurationMinutes || 12,
+    sessionStartTime: currentSession.startTime || '17:30',
+    sessionFinishTime: currentSession.finishTime || '19:30',
+    rollingFairnessLedger
+  });
+
+  const nextSession: ClubTrainingSession = {
+    ...currentSession,
+    id: newSessionId,
+    title: `Thursday Training - ${nextDateStr}`,
+    date: nextDateStr,
+    status: 'draft',
+    rotationPlan: rotationOutput.rotationBlocks || [],
+    opportunityRecords: []
+  };
+
+  return nextSession;
+}
+

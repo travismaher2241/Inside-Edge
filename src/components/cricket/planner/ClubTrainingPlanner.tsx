@@ -11,7 +11,8 @@ import type {
 import { ClubSessionWizard } from './ClubSessionWizard';
 import { FairnessReviewPanel } from './FairnessReviewPanel';
 import { TrainingTemplateManager } from './TrainingTemplateManager';
-import { Play, Dumbbell } from 'lucide-react';
+import { generateNextWeeklySession } from '../../../modules/cricket/clubRotationEngine';
+import { Play, Dumbbell, CalendarPlus } from 'lucide-react';
 
 interface ClubTrainingPlannerProps {
   teams: ClubTeam[];
@@ -126,9 +127,26 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
               )}
 
               {/* Actions */}
-              <div className="home-primary-actions">
+              <div className="home-primary-actions" style={{ flexWrap: 'wrap', gap: '8px' }}>
                 <button className="btn btn-live" onClick={() => onStartLive(currentSession)}>
                   <Play size={18} /> OPEN SESSION
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const nextSession = generateNextWeeklySession({
+                      currentSession,
+                      allPlayers: players,
+                      allResources: resources,
+                      clubTeams: teams,
+                      rollingFairnessLedger: rollingLedger
+                    });
+                    void onSaveSession(nextSession);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Generate next Thursday session (+7 days) factoring in rolling fairness"
+                >
+                  <CalendarPlus size={16} /> Next Thursday (+7d)
                 </button>
                 <button className="btn btn-secondary" onClick={() => setIsWizardOpen(true)}>
                   Edit Plan

@@ -1,5 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react';
-import type { MatchRecord, MatchObservation, Player, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan } from '../types/cricket';
+import type { MatchRecord, MatchObservation, Player, MatchSquad, OppositionBatter, CompetitionRulesProfile, SavedTacticalPlan, Observation } from '../types/cricket';
 import type { TacticalContext, FieldSpot, BowlingPlan } from '../modules/cricket/tactics/types';
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
 import { getMatchWorkflowStatus } from '../modules/cricket/matchWorkflow';
@@ -11,6 +11,7 @@ import { OppositionBatterManager } from '../components/cricket/tactics/Oppositio
 import { RulesProfileSelector } from '../components/cricket/tactics/RulesProfileSelector';
 import { BowlingPlanGenerator } from '../components/cricket/tactics/BowlingPlanGenerator';
 import { FieldBoardModal } from '../components/cricket/FieldBoardModal';
+import { SelectionBoard } from '../components/cricket/SelectionBoard';
 
 const WeeklyRoundupView = lazy(() => import('./WeeklyRoundupView').then(m => ({ default: m.WeeklyRoundupView })));
 const MatchCreationModal = lazy(() => import('../components/cricket/MatchCreationModal').then(m => ({ default: m.MatchCreationModal })));
@@ -21,28 +22,39 @@ interface MatchViewProps {
   matches: MatchRecord[];
   players?: Player[];
   clubTeams?: ClubTeam[];
+  observations?: Observation[];
   activeScope?: ActiveScope;
   selectedMatchId?: string;
   onSelectMatch: (matchId: string) => void;
   onAddMatch: (match: MatchRecord) => void;
   onUpdateMatch: (match: MatchRecord) => void;
+  onUpdatePlayer?: (player: Player) => void;
   onApplyPrioritiesToSession: (priorities: string[]) => void;
 }
 
 export const MatchView: React.FC<MatchViewProps> = ({
   matches,
   players = [],
-  clubTeams: _clubTeams = [],
+  clubTeams = [],
+  observations = [],
   activeScope: _activeScope = { mode: 'team', teamId: 'ct-1' },
   selectedMatchId,
   onSelectMatch,
   onAddMatch,
   onUpdateMatch,
+  onUpdatePlayer,
   onApplyPrioritiesToSession
 }) => {
   const repository = useRepository();
-  const [viewMode, setViewMode] = useState<'fixtures' | 'roundup'>('fixtures');
+  const [viewMode, setViewMode] = useState<'fixtures' | 'selection' | 'roundup'>('fixtures');
   const currentMatch = matches.find(m => m.id === selectedMatchId) || matches[0];
+
+  const handlePlayerTeamReassign = (playerId: string, targetTeamId: string) => {
+    const p = players.find(item => item.id === playerId);
+    if (!p || !onUpdatePlayer) return;
+    const updated: Player = { ...p, primaryTeamId: targetTeamId };
+    onUpdatePlayer(updated);
+  };
 
   const [activeSection, setActiveSection] = useState<'overview' | 'plan' | 'review'>('overview');
   const [isAddMatchOpen, setIsAddMatchOpen] = useState<boolean>(false);
@@ -208,7 +220,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      {/* Top Selector: Fixtures & Review vs Weekly Club Round-Up */}
+      {/* Top Selector: Fixtures & Review vs Selection Board vs Weekly Club Round-Up */}
       <div style={{ display: 'flex', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-md)', padding: '4px', gap: '4px' }}>
         <button
           onClick={() => setViewMode('fixtures')}
@@ -216,6 +228,13 @@ export const MatchView: React.FC<MatchViewProps> = ({
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
         >
           <Trophy size={14} /> MATCHES
+        </button>
+        <button
+          onClick={() => setViewMode('selection')}
+          className={`train-tab-btn ${viewMode === 'selection' ? 'active' : ''}`}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+        >
+          <Users size={14} /> 5-GRADE SELECTION
         </button>
         <button
           onClick={() => setViewMode('roundup')}
@@ -226,7 +245,14 @@ export const MatchView: React.FC<MatchViewProps> = ({
         </button>
       </div>
 
-      {viewMode === 'roundup' ? (
+      {viewMode === 'selection' ? (
+        <SelectionBoard
+          players={players}
+          clubTeams={clubTeams}
+          observations={observations}
+          onUpdatePlayerTeam={handlePlayerTeamReassign}
+        />
+      ) : viewMode === 'roundup' ? (
         <Suspense fallback={<div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading club themes...</div>}>
           <WeeklyRoundupView onApplyPrioritiesToSession={onApplyPrioritiesToSession} />
         </Suspense>

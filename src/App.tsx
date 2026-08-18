@@ -557,13 +557,15 @@ export function App() {
         {activeTab === 'match' && (
           <MatchView
             matches={scopedMatches}
-            players={scopedPlayers}
+            players={players}
             clubTeams={clubTeams}
+            observations={observations}
             activeScope={activeScope}
             selectedMatchId={activeMatch?.id}
             onSelectMatch={setSelectedMatchId}
             onAddMatch={handleAddMatch}
             onUpdateMatch={handleUpdateMatch}
+            onUpdatePlayer={handleUpdatePlayer}
             onApplyPrioritiesToSession={handleApplyMatchPrioritiesToSession}
           />
         )}

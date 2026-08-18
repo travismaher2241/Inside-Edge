@@ -73,4 +73,27 @@ describe('public station delegation service', () => {
     expect(brief).toContain('Alex Turner');
     expect(brief).toContain('Chase 24 off 18 balls');
   });
+
+  it('allows unauthenticated station leaders to submit player observations', async () => {
+    const session = makeStationSession();
+    const link = await PublicStationService.getShareableStationLink(session.id, 'res-4');
+    const token = tokenFrom(link);
+
+    const result = await PublicStationService.submitStationObservation({
+      token,
+      playerId: 'p-1',
+      noteText: 'Hit the seam consistently and moved it away',
+      tags: ['Good execution'],
+      authorLeaderName: 'Alex Turner'
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.observationId).toBeTruthy();
+
+    const storedObs = StorageEngine.getObservations().find(o => o.id === result.observationId);
+    expect(storedObs).toBeDefined();
+    expect(storedObs?.playerId).toBe('p-1');
+    expect(storedObs?.textNote).toContain('Alex Turner');
+    expect(storedObs?.textNote).toContain('Hit the seam consistently');
+  });
 });

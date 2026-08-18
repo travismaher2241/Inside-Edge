@@ -292,16 +292,24 @@ export class PublicStationService {
     noteText: string;
     tags: Array<'Good execution' | 'Needs work' | 'Decision' | 'Technique' | 'Intent' | 'Workload' | 'Custom Note'>;
     authorLeaderName?: string;
-  }): Promise<{ success: boolean; observationId: string }> {
+  }): Promise<{ success: boolean; observationId: string; deliveredToCoach: boolean; error?: string }> {
     const { token, playerId, noteText, tags, authorLeaderName } = options;
     const projection = await this.resolveStationData(token);
-    const sessionId = projection?.sessionId || 'live-session';
-    const leaderName = authorLeaderName || projection?.leaderPlayer?.name || 'Station Leader';
+    if (!projection) {
+      return {
+        success: false,
+        observationId: '',
+        deliveredToCoach: false,
+        error: 'This station link is no longer active. Ask your coach for a new one.'
+      };
+    }
+    const sessionId = projection.sessionId;
+    const leaderName = authorLeaderName || projection.leaderPlayer?.name || 'Station Leader';
 
     const observationId = `obs-station-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const formattedText = noteText?.trim()
-      ? `[${leaderName} - ${projection?.resource.name || 'Station'}]: ${noteText.trim()}`
-      : `[${leaderName} - ${projection?.resource.name || 'Station'}]: Noted standout performance during drill.`;
+      ? `[${leaderName} - ${projection.resource.name}]: ${noteText.trim()}`
+      : `[${leaderName} - ${projection.resource.name}]: Noted standout performance during drill.`;
 
     const observation = {
       id: observationId,
@@ -316,21 +324,32 @@ export class PublicStationService {
       createdAt: new Date().toISOString(),
       createdByUserId: `station:${leaderName.toLowerCase().replace(/\s+/g, '_')}`,
       baseRevision: 1,
-      revision: 1
+      revision: 1,
+      // Authorises the write: Firestore checks this against a live station invitation.
+      stationTokenHash: await computeStationTokenHash(token)
     };
 
-    // Save to local storage cache
+    // Keep a local copy so the leader can see their own notes for the rest of the session.
     StorageEngine.addObservation(observation);
 
-    // Save to Firestore if available
-    if (isFirebaseConfigured) {
-      try {
-        await CloudStorageEngine.addObservation(observation);
-      } catch (err) {
-        console.warn('Could not write public station observation to Firestore, saved locally:', err);
-      }
+    // Without a cloud write the note only ever exists on this phone, and the coach is
+    // the entire audience for it — so a failure here is a failed submission, not a
+    // detail to log and move past.
+    if (!isFirebaseConfigured) {
+      return { success: true, observationId, deliveredToCoach: false };
     }
 
-    return { success: true, observationId };
+    try {
+      await CloudStorageEngine.addObservation(observation);
+      return { success: true, observationId, deliveredToCoach: true };
+    } catch (err) {
+      console.warn('Station note could not be delivered to the coach:', err);
+      return {
+        success: false,
+        observationId,
+        deliveredToCoach: false,
+        error: 'Saved on this phone, but not sent to your coach. Check your signal and try again.'
+      };
+    }
   }
 }

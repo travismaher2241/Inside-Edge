@@ -21,6 +21,24 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
     }
 
+    function stationInvitation(tokenHash) {
+      return get(/databases/$(database)/documents/stationInvitations/$(tokenHash)).data;
+    }
+
+    // An observation submitted from /station/:token. The leader proves they hold a live
+    // invitation, and the note is confined to what a station leader may say: a training
+    // note, on that invitation's session, visible to all coaches. It can never be
+    // confidential, and it cannot be edited or removed without an account.
+    function isStationLeaderNote() {
+      return request.resource.data.stationTokenHash is string
+        && exists(/databases/$(database)/documents/stationInvitations/$(request.resource.data.stationTokenHash))
+        && stationInvitation(request.resource.data.stationTokenHash).get('revokedAt', null) == null
+        && stationInvitation(request.resource.data.stationTokenHash).sessionId == request.resource.data.sessionId
+        && request.resource.data.source == 'training'
+        && request.resource.data.access.staffVisibility == 'all_coaches'
+        && !('visibility' in request.resource.data);
+    }
+
     function isValidTeamToken(teamId, token) {
       return exists(/databases/$(database)/documents/clubTeams/$(teamId))
         && get(/databases/$(database)/documents/clubTeams/$(teamId)).data.submissionToken == token;
@@ -36,10 +54,13 @@ service cloud.firestore {
     }
 
     match /matchReports/{reportId} {
+      // Captains submit without an account, proving themselves with their team token.
       allow create: if request.resource.data.teamId != null
                     && request.resource.data.submissionToken != null
                     && isValidTeamToken(request.resource.data.teamId, request.resource.data.submissionToken);
-      allow read, update, delete: if true;
+      // Reading a report means reading a captain's assessment of their players, and only
+      // coaches do that. Nothing in the app edits or removes a submitted report.
+      allow read, update, delete: if isAssistantOrHeadCoach();
     }
 
     // 2. Coach Accounts & Invites
@@ -114,9 +135,12 @@ service cloud.firestore {
       allow read: if isAssistantOrHeadCoach() && (
         resource.data.visibility != 'head_coach_only' || isHeadCoach()
       );
-      allow create: if isAssistantOrHeadCoach() && (
+      // A station leader running a net has no account, so their note is authorised by
+      // the station token instead: it must name a live invitation, match that
+      // invitation's session, and stay inside the shape a station note can have.
+      allow create: if isStationLeaderNote() || (isAssistantOrHeadCoach() && (
         request.resource.data.visibility != 'head_coach_only' || isHeadCoach()
-      );
+      ));
       allow update, delete: if isAssistantOrHeadCoach() && (
         resource.data.visibility != 'head_coach_only' || isHeadCoach()
       );
