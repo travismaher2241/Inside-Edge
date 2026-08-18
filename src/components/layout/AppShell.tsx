@@ -1,7 +1,7 @@
 // App Shell Layout Component with Navigation & Context Switching
 
 import React, { useState } from 'react';
-import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown, MessageCircleQuestion, AlertTriangle, Download } from 'lucide-react';
+import { Home, Dumbbell, Users, Trophy, BookOpen, Shield, LogOut, UserCheck, ChevronDown, MessageCircleQuestion, AlertTriangle, Download, MoreVertical } from 'lucide-react';
 import type { Team, CoachUser, ClubTeam, ActiveScope } from '../../types/cricket';
 import { ScopeSelectorModal } from './ScopeSelectorModal';
 import { getScopeLabel } from '../../modules/cricket/scopeHelpers';
@@ -49,6 +49,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   children
 }) => {
   const [isScopeModalOpen, setIsScopeModalOpen] = useState<boolean>(false);
+  const [isOverflowMenuOpen, setIsOverflowMenuOpen] = useState<boolean>(false);
   const currentScopeLabel = getScopeLabel(activeScope, clubTeams);
 
   return (
@@ -83,7 +84,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
           <SyncStatusBadge />
 
           <button
@@ -106,157 +107,204 @@ export const AppShell: React.FC<AppShellProps> = ({
             <Shield size={14} /> FIELD BOARD
           </button>
 
-          {onOpenCoachAssistant && (
-            <button
-              type="button"
-              aria-label="Open coach assistant"
-              onClick={onOpenCoachAssistant}
-              style={{
-                background: 'rgba(229, 169, 60, 0.15)',
-                border: '1px solid var(--border-gold)',
-                color: 'var(--accent-gold)',
-                borderRadius: '8px',
-                padding: '6px 10px',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              <MessageCircleQuestion size={14} /> ASK
-            </button>
-          )}
+          {/* Single Overflow Menu for secondary controls */}
+          <button
+            type="button"
+            aria-label="More options"
+            onClick={() => setIsOverflowMenuOpen(prev => !prev)}
+            style={{
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-light)',
+              color: '#fff',
+              borderRadius: '8px',
+              padding: '6px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <MoreVertical size={16} />
+          </button>
 
-          {onOpenRulesManagement && (
-            <button
-              type="button"
-              aria-label="Competition Rules Management"
-              onClick={onOpenRulesManagement}
-              style={{
-                background: 'rgba(59, 130, 246, 0.15)',
-                border: '1px solid #3b82f6',
-                color: '#60a5fa',
-                borderRadius: '8px',
-                padding: '6px 10px',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              <BookOpen size={14} /> RULES
-            </button>
-          )}
-
-          {onExportData && (
-            <button
-              type="button"
-              aria-label="Export Club & Team Data"
-              onClick={onExportData}
-              title="Export Club Data (JSON)"
-              style={{
-                background: 'rgba(16, 185, 129, 0.15)',
-                border: '1px solid #10b981',
-                color: '#34d399',
-                borderRadius: '8px',
-                padding: '6px 10px',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              <Download size={14} /> EXPORT
-            </button>
-          )}
-
-          {onOpenReportProblem && (
-            <button
-              type="button"
-              aria-label="Report Problem"
-              onClick={onOpenReportProblem}
-              title="Report Problem / Feedback"
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid #ef4444',
-                color: '#f87171',
-                borderRadius: '8px',
-                padding: '6px 8px',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              <AlertTriangle size={14} />
-            </button>
-          )}
-
-          {currentCoach && (
+          {isOverflowMenuOpen && (
             <>
-              {currentCoach.role === 'head_coach' && onOpenCoachManager && (
-                <button
-                  type="button"
-                  aria-label="Manage coaches"
-                  onClick={onOpenCoachManager}
-                  style={{
-                    background: 'var(--accent-gold-soft)',
-                    border: '1px solid var(--border-gold)',
-                    color: 'var(--accent-gold)',
-                    borderRadius: '8px',
-                    padding: '6px 10px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <UserCheck size={14} /> COACHES
-                </button>
-              )}
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 998 }}
+                onClick={() => setIsOverflowMenuOpen(false)}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '8px',
+                  background: 'var(--bg-surface-elevated, #1c271f)',
+                  border: '1px solid var(--border-light, #2d3748)',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  zIndex: 999,
+                  minWidth: '180px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '4px',
+                  gap: '2px'
+                }}
+              >
+                {onOpenCoachAssistant && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onOpenCoachAssistant();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <MessageCircleQuestion size={15} color="var(--accent-gold)" /> Coach Assistant
+                  </button>
+                )}
 
-              {onSignOut && (
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  title="Sign Out"
-                  style={{
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid #ef4444',
-                    color: '#ef4444',
-                    borderRadius: '8px',
-                    padding: '6px 8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <LogOut size={14} />
-                </button>
-              )}
+                {onOpenRulesManagement && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onOpenRulesManagement();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <BookOpen size={15} color="#60a5fa" /> Competition Rules
+                  </button>
+                )}
+
+                {onExportData && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onExportData();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <Download size={15} color="#34d399" /> Export Club Data
+                  </button>
+                )}
+
+                {currentCoach && currentCoach.role === 'head_coach' && onOpenCoachManager && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onOpenCoachManager();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <UserCheck size={15} color="var(--accent-gold)" /> Manage Coaches
+                  </button>
+                )}
+
+                {onOpenReportProblem && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onOpenReportProblem();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#fff',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <AlertTriangle size={15} color="#f87171" /> Report Problem
+                  </button>
+                )}
+
+                {currentCoach && onSignOut && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOverflowMenuOpen(false);
+                      onSignOut();
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      borderTop: '1px solid var(--border-light)',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <LogOut size={15} /> Sign Out
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
       </header>
-
-      {/* Persistent Working Scope Banner */}
-      <div style={{ background: activeScope.mode === 'club' ? 'rgba(229, 169, 60, 0.12)' : 'rgba(74, 222, 128, 0.08)', padding: '4px 16px', fontSize: '0.7rem', fontWeight: 800, color: activeScope.mode === 'club' ? 'var(--accent-gold)' : '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)' }}>
-        <span>{activeScope.mode === 'club' ? 'CLUB VIEW — Inside Edge Cricket Club' : `TEAM VIEW — ${currentScopeLabel}`}</span>
-        <button onClick={() => setIsScopeModalOpen(true)} style={{ background: 'none', border: 'none', color: 'inherit', fontSize: '0.68rem', textDecoration: 'underline', cursor: 'pointer' }}>Change context</button>
-      </div>
 
       {/* Main View Body */}
       <main className="app-main">

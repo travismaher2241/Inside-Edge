@@ -6,7 +6,6 @@ import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scope
 import { getAttachmentDownloadUrl } from '../modules/cricket/mediaStorageEngine';
 import { Plus, X, Check, ChevronRight, ArrowLeft, ShieldAlert, Filter, Search, ChevronLeft, MessageSquare, Users, Shield } from 'lucide-react';
 import { BowlingProfileEditor } from '../components/cricket/tactics/BowlingProfileEditor';
-import { StorageEngine } from '../storage/db';
 
 const ObservationClipPlayer: React.FC<{ attachment: ObservationAttachment }> = ({ attachment }) => {
   const [url, setUrl] = useState<string | null>(null);
@@ -47,7 +46,7 @@ interface TeamViewProps {
   onAddDevelopmentFocus: (focus: DevelopmentFocus) => void;
   onUpdateDevelopmentFocusState: (focusId: string, newState: FocusLifecycleState) => void;
   onAddPlayer: (player: Player) => void;
-  onUpdatePlayer?: (player: Player) => void;
+  onUpdatePlayer: (player: Player) => void;
 }
 
 const ROLES: Array<{ value: PrimaryRole | 'all'; label: string }> = [
@@ -663,9 +662,8 @@ export const TeamView: React.FC<TeamViewProps> = ({
                   key={selectedPlayer.id}
                   player={selectedPlayer}
                   onSavePlayer={updated => {
-                    StorageEngine.updatePlayer(updated);
                     setSelectedPlayer(updated);
-                    if (onUpdatePlayer) onUpdatePlayer(updated);
+                    onUpdatePlayer(updated);
                   }}
                 />
               ) : (

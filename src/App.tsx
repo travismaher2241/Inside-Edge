@@ -32,6 +32,9 @@ import { ClubSetupWizard } from './components/onboarding/ClubSetupWizard';
 import { ReportProblemModal } from './components/diagnostics/ReportProblemModal';
 import { DataExportService } from './modules/export/dataExportService';
 import { PermissionMatrix } from './modules/permissions/permissionMatrix';
+import { useToast } from './components/common/Toast';
+import { createCricketRepository } from './storage/CricketRepository';
+import { RepositoryProvider } from './storage/RepositoryContext';
 import { SEED_TEAM, SEED_PLAYERS, SEED_ACTIVITIES, SEED_MATCH_RECORD, SEED_DEVELOPMENT_FOCUSES, SEED_OBSERVATIONS, SEED_CLUB_TEAMS, SEED_TRAINING_RESOURCES, SEED_FAIRNESS_LEDGER, SEED_SAVED_TEMPLATES } from './modules/cricket/seedData';
 const PublicCaptainReportView = lazy(() => import('./views/PublicCaptainReportView').then(m => ({ default: m.PublicCaptainReportView })));
 const PublicRsvpView = lazy(() => import('./views/PublicRsvpView').then(m => ({ default: m.PublicRsvpView })));
@@ -46,6 +49,7 @@ const TEST_ACCESS_COACH: CoachUser = {
 };
 
 export function App() {
+  const { showToast } = useToast();
   // Auth & Coach State
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [coachProfile, setCoachProfile] = useState<CoachUser | null>(null);
@@ -58,6 +62,9 @@ export function App() {
   const [isReportProblemOpen, setIsReportProblemOpen] = useState<boolean>(false);
   const [isTestMode, setIsTestMode] = useState<boolean>(false);
   const effectiveCoachProfile = isTestMode ? TEST_ACCESS_COACH : coachProfile;
+
+  // One data-access implementation, chosen once. Views read it from context.
+  const repository = useMemo(() => createCricketRepository(isTestMode), [isTestMode]);
 
   // App Tab & View State
   const [activeTab, setActiveTab] = useState<TabType>('home');
@@ -185,13 +192,11 @@ export function App() {
     return getActiveMatch(filteredMatches) || filteredMatches[0];
   }, [filteredMatches, selectedMatchId]);
 
-  // Save Handlers (Persisted to Firestore via CloudStorageEngine, or kept local-only in Test Access mode)
+  // Save handlers. Each updates React state optimistically and hands persistence
+  // to the repository, which no-ops in Test Access mode.
   const handleSaveObservation = (observation: Observation) => {
-    if (isTestMode) {
-      setObservations(prev => [...prev, observation]);
-    } else {
-      CloudStorageEngine.addObservation(observation);
-    }
+    setObservations(prev => [...prev, observation]);
+    void repository.addObservation(observation);
   };
 
   const handleAddMatch = (newMatch: MatchRecord) => {
@@ -199,18 +204,15 @@ export function App() {
       ...newMatch,
       teamId: newMatch.teamId || (activeScope.mode === 'team' ? activeScope.teamId : 'ct-1')
     };
-    if (isTestMode) {
-      setMatches(prev => [...prev, matchWithTeam]);
-    } else {
-      CloudStorageEngine.addMatch(matchWithTeam);
-    }
+    setMatches(prev => [...prev, matchWithTeam]);
+    void repository.addMatch(matchWithTeam);
     setSelectedMatchId(matchWithTeam.id);
   };
 
   const handleExportData = () => {
     const role = effectiveCoachProfile?.role || 'head_coach';
     if (!PermissionMatrix.canExecute(role, 'export_data')) {
-      alert('Permission denied: Only coaches can export data.');
+      showToast('Permission denied: Only coaches can export data.', 'error');
       return;
     }
     const bundle = DataExportService.generateExportBundle({
@@ -224,76 +226,62 @@ export function App() {
       sessions: clubSessions
     });
     DataExportService.downloadJsonExport(bundle);
+    showToast('Club data export downloaded.', 'success');
   };
 
   const handleUpdateMatch = (updatedMatch: MatchRecord) => {
-    if (isTestMode) {
-      setMatches(prev => prev.map(m => (m.id === updatedMatch.id ? updatedMatch : m)));
-    } else {
-      CloudStorageEngine.updateMatch(updatedMatch);
-    }
+    setMatches(prev => prev.map(m => (m.id === updatedMatch.id ? updatedMatch : m)));
+    void repository.updateMatch(updatedMatch);
   };
 
   const handleAddDevelopmentFocus = (focus: DevelopmentFocus) => {
-    if (isTestMode) {
-      setFocuses(prev => [...prev, focus]);
-    } else {
-      CloudStorageEngine.addDevelopmentFocus(focus);
-    }
+    setFocuses(prev => [...prev, focus]);
+    void repository.addDevelopmentFocus(focus);
   };
 
   const handleUpdateDevelopmentFocusState = (focusId: string, newState: FocusLifecycleState) => {
     const target = focuses.find(f => f.id === focusId);
     if (target) {
       const updated = { ...target, state: newState };
-      if (isTestMode) {
-        setFocuses(prev => prev.map(f => (f.id === focusId ? updated : f)));
-      } else {
-        CloudStorageEngine.updateDevelopmentFocus(updated);
-      }
+      setFocuses(prev => prev.map(f => (f.id === focusId ? updated : f)));
+      void repository.updateDevelopmentFocus(updated);
     }
   };
 
   const handleAddPlayer = (newPlayer: Player) => {
-    if (isTestMode) {
-      setPlayers(prev => [...prev, newPlayer]);
-    } else {
-      CloudStorageEngine.addPlayer(newPlayer);
-    }
+    setPlayers(prev => [...prev, newPlayer]);
+    void repository.addPlayer(newPlayer);
   };
 
   const handleUpdatePlayer = (updatedPlayer: Player) => {
-    if (isTestMode) {
-      setPlayers(prev => prev.map(p => (p.id === updatedPlayer.id ? updatedPlayer : p)));
-    } else {
-      CloudStorageEngine.updatePlayer(updatedPlayer);
-    }
+    setPlayers(prev => prev.map(p => (p.id === updatedPlayer.id ? updatedPlayer : p)));
+    void repository.updatePlayer(updatedPlayer);
   };
 
   const handleSaveClubSession = (updatedSession: ClubTrainingSession) => {
     setClubSessions(prev => [updatedSession, ...prev.filter(item => item.id !== updatedSession.id)]);
     setCurrentClubSessionId(updatedSession.id);
-    if (!isTestMode) void CloudStorageEngine.saveClubSession(updatedSession);
+    void repository.saveSession(updatedSession);
   };
 
   const handleSaveClubTemplate = (template: SavedClubTemplate) => {
     setSavedClubTemplates(prev => [...prev.filter(item => item.id !== template.id), template]);
-    if (!isTestMode) void CloudStorageEngine.saveClubTemplate(template);
+    void repository.saveTemplate(template);
   };
 
   const handleDeleteClubTemplate = (templateId: string) => {
     setSavedClubTemplates(previous => previous.filter(template => template.id !== templateId));
-    if (!isTestMode) void CloudStorageEngine.deleteClubTemplate(templateId);
+    void repository.deleteTemplate(templateId);
   };
 
   const handleSaveFieldSetting = (setting: SavedFieldSetting) => {
     setSavedFieldSettings(previous => [setting, ...previous.filter(item => item.id !== setting.id)]);
-    if (!isTestMode) void CloudStorageEngine.saveFieldSetting(setting);
+    void repository.saveFieldSetting(setting);
   };
 
   const handleDeleteFieldSetting = (settingId: string) => {
     setSavedFieldSettings(previous => previous.filter(item => item.id !== settingId));
-    if (!isTestMode) void CloudStorageEngine.deleteFieldSetting(settingId);
+    void repository.deleteFieldSetting(settingId);
   };
 
 
@@ -318,7 +306,7 @@ export function App() {
       handleSaveClubSession(completed.session);
       if (completed.applied) {
         setFairnessLedger(completed.ledger);
-        if (!isTestMode) void CloudStorageEngine.saveFairnessLedger(completed.ledger);
+        void repository.saveFairnessLedger(completed.ledger);
       }
       setCurrentClubSessionId(undefined);
     }
@@ -444,199 +432,201 @@ export function App() {
   };
 
   return (
-    <AppShell
-      activeTab={activeTab}
-      onSelectTab={setActiveTab}
-      team={team}
-      clubTeams={clubTeams}
-      totalPlayersCount={players.length}
-      activeScope={activeScope}
-      onSelectScope={setActiveScope}
-      onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
-      currentCoach={effectiveCoachProfile}
-      onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
-      onOpenCoachAssistant={() => setIsCoachAssistantOpen(true)}
-      onOpenRulesManagement={() => setIsRulesManagementOpen(true)}
-      onOpenReportProblem={() => setIsReportProblemOpen(true)}
-      onExportData={handleExportData}
-      onOpenOnboarding={() => setIsOnboardingOpen(true)}
-      onSignOut={handleSignOut}
-    >
-      {activeTab === 'home' && (
-        <HomeView
-          session={currentClubSession}
-          match={activeMatch}
-          matches={filteredMatches}
-          sessions={clubSessions}
-          players={players}
-          focuses={focuses}
-          resources={trainingResources}
-          team={team}
-          clubTeams={clubTeams}
-          activeScope={activeScope}
-          onStartLiveSession={() => { if (currentClubSession) setIsLiveMode(true); }}
-          onNavigateToTrain={() => setActiveTab('train')}
-          onNavigateToMatch={() => setActiveTab('match')}
-          onNavigateToTeam={() => setActiveTab('team')}
-          onNavigateToLibrary={() => setActiveTab('library')}
-        />
-      )}
-
-      {activeTab === 'train' && (
-        <TrainView
-          players={players}
-          clubTeams={clubTeams}
-          activeScope={activeScope}
-          trainingResources={trainingResources}
-          currentSession={currentClubSession}
-          fairnessLedger={fairnessLedger}
-          savedClubTemplates={savedClubTemplates}
-          onSaveClubSession={handleSaveClubSession}
-          onSaveClubTemplate={handleSaveClubTemplate}
-          onDeleteClubTemplate={handleDeleteClubTemplate}
-          onStartLiveSession={(session) => {
-            handleSaveClubSession({ ...session, status: 'live' });
-            setIsLiveMode(true);
-          }}
-        />
-      )}
-
-      {activeTab === 'team' && (
-        <TeamView
-          players={players}
-          clubTeams={clubTeams}
-          activeScope={activeScope}
-          focuses={focuses}
-          observations={observations}
-          session={currentClubSession}
-          onUpdateSession={handleSaveClubSession}
-          onOpenQuickObservation={p => setObservedPlayer(p)}
-          onAddDevelopmentFocus={handleAddDevelopmentFocus}
-          onUpdateDevelopmentFocusState={handleUpdateDevelopmentFocusState}
-          onAddPlayer={handleAddPlayer}
-          onUpdatePlayer={handleUpdatePlayer}
-        />
-
-      )}
-
-      {activeTab === 'match' && (
-        <MatchView
-          matches={filteredMatches}
-          players={players}
-          clubTeams={clubTeams}
-          activeScope={activeScope}
-          selectedMatchId={activeMatch?.id}
-          onSelectMatch={setSelectedMatchId}
-          onAddMatch={handleAddMatch}
-          onUpdateMatch={handleUpdateMatch}
-          onApplyPrioritiesToSession={handleApplyMatchPrioritiesToSession}
-        />
-      )}
-
-      {activeTab === 'library' && (
-        <LibraryView
-          activities={activities}
-          onAddActivityToSession={handleAddActivityToSession}
-          addedActivityIds={currentClubSession?.blocks.flatMap(block => block.activityId ? [block.activityId] : [])}
-          onUndoAddActivity={handleUndoActivity}
-        />
-      )}
-
-      {observedPlayer && (
-        <QuickObservationModal
-          player={observedPlayer}
-          sessionId={currentClubSession?.id}
-          activeFocuses={focuses.filter(f => f.playerId === observedPlayer.id && f.state !== 'ARCHIVED')}
-          isOpen={!!observedPlayer}
-          onClose={() => setObservedPlayer(null)}
-          onSaved={handleSaveObservation}
-          isJuniorTeam={!!clubTeams.find(t => t.id === observedPlayer.primaryTeamId)?.juniorMode}
-        />
-      )}
-
-      {isFieldBoardOpen && (
-        <Suspense fallback={null}>
-          <FieldBoardModal
-            onClose={() => setIsFieldBoardOpen(false)}
-            savedSettings={savedFieldSettings}
-            matchId={activeMatch?.id}
-            onSaveSetting={handleSaveFieldSetting}
-            onDeleteSetting={handleDeleteFieldSetting}
+    <RepositoryProvider repository={repository}>
+      <AppShell
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        team={team}
+        clubTeams={clubTeams}
+        totalPlayersCount={players.length}
+        activeScope={activeScope}
+        onSelectScope={setActiveScope}
+        onOpenFieldBoard={() => setIsFieldBoardOpen(true)}
+        currentCoach={effectiveCoachProfile}
+        onOpenCoachManager={isTestMode ? undefined : () => setIsCoachManagerOpen(true)}
+        onOpenCoachAssistant={() => setIsCoachAssistantOpen(true)}
+        onOpenRulesManagement={() => setIsRulesManagementOpen(true)}
+        onOpenReportProblem={() => setIsReportProblemOpen(true)}
+        onExportData={handleExportData}
+        onOpenOnboarding={() => setIsOnboardingOpen(true)}
+        onSignOut={handleSignOut}
+      >
+        {activeTab === 'home' && (
+          <HomeView
+            session={currentClubSession}
+            match={activeMatch}
+            matches={filteredMatches}
+            sessions={clubSessions}
+            players={players}
+            focuses={focuses}
+            resources={trainingResources}
+            team={team}
+            clubTeams={clubTeams}
+            activeScope={activeScope}
+            onStartLiveSession={() => { if (currentClubSession) setIsLiveMode(true); }}
+            onNavigateToTrain={() => setActiveTab('train')}
+            onNavigateToMatch={() => setActiveTab('match')}
+            onNavigateToTeam={() => setActiveTab('team')}
+            onNavigateToLibrary={() => setActiveTab('library')}
           />
-        </Suspense>
-      )}
+        )}
 
-      {isCoachManagerOpen && !isTestMode && coachProfile?.role === 'head_coach' && (
-        <CoachManagerModal
-          currentCoach={coachProfile}
-          onClose={() => setIsCoachManagerOpen(false)}
-        />
-      )}
+        {activeTab === 'train' && (
+          <TrainView
+            players={players}
+            clubTeams={clubTeams}
+            activeScope={activeScope}
+            trainingResources={trainingResources}
+            currentSession={currentClubSession}
+            fairnessLedger={fairnessLedger}
+            savedClubTemplates={savedClubTemplates}
+            onSaveClubSession={handleSaveClubSession}
+            onSaveClubTemplate={handleSaveClubTemplate}
+            onDeleteClubTemplate={handleDeleteClubTemplate}
+            onStartLiveSession={(session) => {
+              handleSaveClubSession({ ...session, status: 'live' });
+              setIsLiveMode(true);
+            }}
+          />
+        )}
 
-      {isCoachAssistantOpen && (
-        <CoachAssistantPanel
-          players={players}
-          sessions={clubSessions}
-          focuses={focuses}
-          observations={observations}
-          activeScope={activeScope}
-          onClose={() => setIsCoachAssistantOpen(false)}
-        />
-      )}
+        {activeTab === 'team' && (
+          <TeamView
+            players={players}
+            clubTeams={clubTeams}
+            activeScope={activeScope}
+            focuses={focuses}
+            observations={observations}
+            session={currentClubSession}
+            onUpdateSession={handleSaveClubSession}
+            onOpenQuickObservation={p => setObservedPlayer(p)}
+            onAddDevelopmentFocus={handleAddDevelopmentFocus}
+            onUpdateDevelopmentFocusState={handleUpdateDevelopmentFocusState}
+            onAddPlayer={handleAddPlayer}
+            onUpdatePlayer={handleUpdatePlayer}
+          />
 
-      {isRulesManagementOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setIsRulesManagementOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Competition rules management"
-            className="bottom-sheet-content"
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto' }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-              <button
-                onClick={() => setIsRulesManagementOpen(false)}
-                className="btn btn-secondary"
-                style={{ width: 'auto', padding: '4px 12px', fontSize: '0.78rem' }}
-              >
-                Close Rules
-              </button>
+        )}
+
+        {activeTab === 'match' && (
+          <MatchView
+            matches={filteredMatches}
+            players={players}
+            clubTeams={clubTeams}
+            activeScope={activeScope}
+            selectedMatchId={activeMatch?.id}
+            onSelectMatch={setSelectedMatchId}
+            onAddMatch={handleAddMatch}
+            onUpdateMatch={handleUpdateMatch}
+            onApplyPrioritiesToSession={handleApplyMatchPrioritiesToSession}
+          />
+        )}
+
+        {activeTab === 'library' && (
+          <LibraryView
+            activities={activities}
+            onAddActivityToSession={handleAddActivityToSession}
+            addedActivityIds={currentClubSession?.blocks.flatMap(block => block.activityId ? [block.activityId] : [])}
+            onUndoAddActivity={handleUndoActivity}
+          />
+        )}
+
+        {observedPlayer && (
+          <QuickObservationModal
+            player={observedPlayer}
+            sessionId={currentClubSession?.id}
+            activeFocuses={focuses.filter(f => f.playerId === observedPlayer.id && f.state !== 'ARCHIVED')}
+            isOpen={!!observedPlayer}
+            onClose={() => setObservedPlayer(null)}
+            onSaved={handleSaveObservation}
+            isJuniorTeam={!!clubTeams.find(t => t.id === observedPlayer.primaryTeamId)?.juniorMode}
+          />
+        )}
+
+        {isFieldBoardOpen && (
+          <Suspense fallback={null}>
+            <FieldBoardModal
+              onClose={() => setIsFieldBoardOpen(false)}
+              savedSettings={savedFieldSettings}
+              matchId={activeMatch?.id}
+              onSaveSetting={handleSaveFieldSetting}
+              onDeleteSetting={handleDeleteFieldSetting}
+            />
+          </Suspense>
+        )}
+
+        {isCoachManagerOpen && !isTestMode && coachProfile?.role === 'head_coach' && (
+          <CoachManagerModal
+            currentCoach={coachProfile}
+            onClose={() => setIsCoachManagerOpen(false)}
+          />
+        )}
+
+        {isCoachAssistantOpen && (
+          <CoachAssistantPanel
+            players={players}
+            sessions={clubSessions}
+            focuses={focuses}
+            observations={observations}
+            activeScope={activeScope}
+            onClose={() => setIsCoachAssistantOpen(false)}
+          />
+        )}
+
+        {isRulesManagementOpen && (
+          <div className="bottom-sheet-overlay" onClick={() => setIsRulesManagementOpen(false)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Competition rules management"
+              className="bottom-sheet-content"
+              onClick={e => e.stopPropagation()}
+              style={{ maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                <button
+                  onClick={() => setIsRulesManagementOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ width: 'auto', padding: '4px 12px', fontSize: '0.78rem' }}
+                >
+                  Close Rules
+                </button>
+              </div>
+              <RulesManagementView
+                teamId={activeScope.mode === 'team' ? activeScope.teamId : 'ct-1'}
+                userRole={effectiveCoachProfile?.role || 'head_coach'}
+              />
             </div>
-            <RulesManagementView
-              teamId={activeScope.mode === 'team' ? activeScope.teamId : 'ct-1'}
-              userRole={effectiveCoachProfile?.role || 'head_coach'}
-            />
           </div>
-        </div>
-      )}
+        )}
 
-      {isOnboardingOpen && (
-        <div className="bottom-sheet-overlay" onClick={() => setIsOnboardingOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Club setup wizard"
-            className="bottom-sheet-content"
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}
-          >
-            <ClubSetupWizard
-              isOpen={isOnboardingOpen}
-              onClose={() => setIsOnboardingOpen(false)}
-              onComplete={() => setIsOnboardingOpen(false)}
-            />
+        {isOnboardingOpen && (
+          <div className="bottom-sheet-overlay" onClick={() => setIsOnboardingOpen(false)}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Club setup wizard"
+              className="bottom-sheet-content"
+              onClick={e => e.stopPropagation()}
+              style={{ maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}
+            >
+              <ClubSetupWizard
+                isOpen={isOnboardingOpen}
+                onClose={() => setIsOnboardingOpen(false)}
+                onComplete={() => setIsOnboardingOpen(false)}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {isReportProblemOpen && (
-        <ReportProblemModal
-          isOpen={isReportProblemOpen}
-          onClose={() => setIsReportProblemOpen(false)}
-        />
-      )}
-    </AppShell>
+        {isReportProblemOpen && (
+          <ReportProblemModal
+            isOpen={isReportProblemOpen}
+            onClose={() => setIsReportProblemOpen(false)}
+          />
+        )}
+      </AppShell>
+    </RepositoryProvider>
   );
 }
 

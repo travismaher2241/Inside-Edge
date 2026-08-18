@@ -19,7 +19,8 @@ import {
 } from '../../../modules/cricket/clubRotationEngine';
 import { CentreWicketScenarioBuilder } from './CentreWicketScenarioBuilder';
 import { RsvpInvitationService } from '../../../modules/cricket/rsvpInvitationService';
-import { AlertTriangle, Check, ChevronDown, ChevronUp, X, UserCheck, Link, Copy } from 'lucide-react';
+import { useToast } from '../../common/Toast';
+import { AlertTriangle, ChevronDown, ChevronUp, X, Link, Copy, Play } from 'lucide-react';
 
 interface ClubSessionWizardProps {
   teams: ClubTeam[];
@@ -28,6 +29,7 @@ interface ClubSessionWizardProps {
   savedTemplates: SavedClubTemplate[];
   rollingLedger: RollingFairnessLedger[];
   selectedTemplate?: SavedClubTemplate;
+  currentSession?: ClubTrainingSession;
   onFinalise: (session: ClubTrainingSession, action: 'save' | 'launch') => void | Promise<void>;
   onSaveTemplate: (template: SavedClubTemplate) => void;
   onClose: () => void;
@@ -40,11 +42,13 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   savedTemplates: _savedTemplates,
   rollingLedger,
   selectedTemplate,
+  currentSession,
   onFinalise,
   onSaveTemplate: _onSaveTemplate,
   onClose
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2>(1);
+  const { showToast } = useToast();
 
   // Step 1: Session Setup
   const [title, setTitle] = useState<string>('Thursday Training Session');
@@ -65,6 +69,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   useEffect(() => {
     setRotationBlockMins(includesJuniorTeam ? 8 : 12);
   }, [includesJuniorTeam]);
+
   const [sessionObjectives, setSessionObjectives] = useState<string[]>([
     'New-ball decision making',
     'T20 Middle overs scenario',
@@ -72,13 +77,17 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
   ]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Step 2: Player Availability Records
+  // Step 2: Player Availability Records (Default to last session or player preference)
   const [availabilityRecords, setAvailabilityRecords] = useState<Record<string, PlayerAvailabilityRecord>>(() => {
     const initial: Record<string, PlayerAvailabilityRecord> = {};
+    const lastSessionAttendeeIds = new Set(currentSession?.confirmedAttendingPlayerIds || []);
+    const hasLastSession = lastSessionAttendeeIds.size > 0;
+
     players.forEach(p => {
+      const isAttending = hasLastSession ? lastSessionAttendeeIds.has(p.id) : (p.trainingAvailability !== false);
       initial[p.id] = {
         playerId: p.id,
-        status: p.trainingAvailability ? 'attending' : 'not_attending',
+        status: isAttending ? 'attending' : 'not_attending',
         expectedArrivalTime: '18:00',
         expectedDepartureTime: '19:30',
         injurySorenessNotes: p.workloadRestriction?.notes || ''
@@ -87,8 +96,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
     return initial;
   });
 
-  // Staff Assignments & Role Overrides Modal
-  const [staffAssignments, setStaffAssignments] = useState<Record<string, StaffPlayerAssignment>>(() => {
+  // Derived Staff Assignments from Player profiles
+  const staffAssignments = useMemo<Record<string, StaffPlayerAssignment>>(() => {
     const initial: Record<string, StaffPlayerAssignment> = {};
     players.forEach(p => {
       let battingRole: StaffPlayerAssignment['trainingBattingRole'] = 'general_rotation';
@@ -109,21 +118,15 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       };
     });
     return initial;
-  });
+  }, [players]);
 
-  const [editingPlayerSettingsId, setEditingPlayerSettingsId] = useState<string | null>(null);
   const [expandedBlockId, setExpandedBlockId] = useState<string | null>(null);
-  const [showPlanningChecks, setShowPlanningChecks] = useState<boolean>(false);
   const [showRationale, setShowRationale] = useState<boolean>(false);
-
-  // Step 4: Manual Locks
   const [manualLocks] = useState<Record<string, boolean>>({});
   const [centreWicketScenario, setCentreWicketScenario] = useState<CentreWicketScenario | undefined>();
-
-  // Error State
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedTemplate) return;
     setRotationBlockMins(selectedTemplate.rotationDurationMinutes);
     setSessionObjectives(selectedTemplate.sessionObjectives);
@@ -226,7 +229,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
     };
   }, [activeResources, attendingPlayers, teams, selectedTeamIds, availabilityRecords, staffAssignments, sessionObjectives, rotationBlockMins, startTime, finishTime, manualLocks, rollingLedger, centreWicketScenario]);
 
-  // Plain-English "Why this plan?" explanation, generated from the same engine output
+  // Plain-English "Why this plan?" explanation
   const rationale = useMemo(() => {
     if (!engineOutput) return '';
     return generateSessionRationale(engineOutput, sessionObjectives, {
@@ -277,20 +280,6 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
       };
     });
     setAvailabilityRecords(updated);
-  };
-
-  const handleUpdateStaffAssignment = (playerId: string, update: Partial<StaffPlayerAssignment>) => {
-    setStaffAssignments(prev => ({
-      ...prev,
-      [playerId]: {
-        ...prev[playerId],
-        playerId,
-        trainingBattingRole: prev[playerId]?.trainingBattingRole || 'general_rotation',
-        trainingBowlingRole: prev[playerId]?.trainingBowlingRole || 'general_rotation',
-        bowlingTrainingBand: prev[playerId]?.bowlingTrainingBand || 'band_1_primary',
-        ...update
-      }
-    }));
   };
 
   const handleFinalise = async (action: 'save' | 'launch') => {
@@ -350,6 +339,7 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
     };
     try {
       await onFinalise(newSession, action);
+      showToast(action === 'launch' ? 'Live session launched!' : 'Session plan saved successfully.', 'success');
       onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save session.');
@@ -383,13 +373,11 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
             </button>
           </div>
 
-          {/* Clean 4-Stage Progress Header */}
+          {/* Streamlined 2-Stage Progress Header */}
           <div className="wizard-step-bar">
             {[
-              { s: 1, name: 'SESSION' },
-              { s: 2, name: 'PEOPLE' },
-              { s: 3, name: 'PLAN' },
-              { s: 4, name: 'REVIEW' }
+              { s: 1, name: 'SETUP' },
+              { s: 2, name: "WHO'S HERE & PLAN" }
             ].map(({ s, name }) => {
               const isActive = step === s;
               const isCompleted = step > s;
@@ -397,7 +385,8 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 <div
                   key={s}
                   className={`wizard-step-item ${isActive ? 'active' : isCompleted ? 'completed' : ''}`}
-                  onClick={() => s < step && setStep(s as any)}
+                  onClick={() => s < step && setStep(s as 1 | 2)}
+                  style={{ cursor: s < step ? 'pointer' : 'default', flex: 1, textAlign: 'center' }}
                 >
                   <span>{s}. {name}</span>
                 </div>
@@ -535,141 +524,140 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               </div>
 
               <button className="btn btn-gold" onClick={() => setStep(2)}>
-                Continue to Players →
+                Continue to Attendance & Plan Preview →
               </button>
             </div>
           )}
 
-          {/* STEP 2: Compact Attendance & Player Roster */}
+          {/* STEP 2: Attendance + Live Plan Preview + Start */}
           {step === 2 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>PLAYERS</h3>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    {attendingPlayers.length} of {players.length} attending
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Attendance Bar */}
+              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                      WHO'S HERE
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      {attendingPlayers.length} of {players.length} attending ({currentSession ? 'Defaulted to last session' : 'Defaulted to available'})
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const msg = RsvpInvitationService.getGenericGroupAnnouncement(
+                          { id: 'sess-temp', clubId: 'c1', title, date, startTime, finishTime, venueFacilityId, includedTeamIds: selectedTeamIds, availableResourceIds: selectedResourceIds, expectedPlayerIds: [], confirmedAttendingPlayerIds: [], availabilityRecords: {}, staffPlayerAssignments: {}, sessionObjectives, rotationDurationMinutes: rotationBlockMins, captainCoachAssignments: [], rotationPlan: [], manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 20 }, blocks: [], activeBlockIndex: 0, activeRotationIndex: 0, status: 'planned', warnings: [], planningVersion: 1, rsvps: {}, liveAttendance: {} },
+                          teams.find(t => selectedTeamIds.includes(t.id))
+                        );
+                        if (navigator.clipboard) void navigator.clipboard.writeText(msg);
+                        showToast('Copied group WhatsApp announcement to clipboard!', 'success');
+                      }}
+                      style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Copy size={12} /> WhatsApp Notice
+                    </button>
+                    <button className="btn btn-secondary" onClick={markAllAttending} style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem' }}>
+                      Mark All
+                    </button>
+                    <button className="btn btn-secondary" onClick={clearAllAttendance} style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem' }}>
+                      Clear
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      const msg = RsvpInvitationService.getGenericGroupAnnouncement(
-                        { id: 'sess-temp', clubId: 'c1', title, date, startTime, finishTime, venueFacilityId, includedTeamIds: selectedTeamIds, availableResourceIds: selectedResourceIds, expectedPlayerIds: [], confirmedAttendingPlayerIds: [], availabilityRecords: {}, staffPlayerAssignments: {}, sessionObjectives, rotationDurationMinutes: rotationBlockMins, captainCoachAssignments: [], rotationPlan: [], manualLocks: {}, fairnessSettings: { targetEqualBattingMinutes: 20 }, blocks: [], activeBlockIndex: 0, activeRotationIndex: 0, status: 'planned', warnings: [], planningVersion: 1, rsvps: {}, liveAttendance: {} },
-                        teams.find(t => selectedTeamIds.includes(t.id))
-                      );
-                      if (navigator.clipboard) void navigator.clipboard.writeText(msg);
-                      alert('Copied group WhatsApp announcement to clipboard! (Contains NO personal links).');
-                    }}
-                    style={{ width: 'auto', padding: '0 8px', height: '30px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <Copy size={12} /> WhatsApp Group Notice
-                  </button>
-                  <button className="btn btn-secondary" onClick={markAllAttending} style={{ width: 'auto', padding: '0 8px', height: '30px', fontSize: '0.72rem' }}>
-                    Mark All Attending
-                  </button>
-                  <button className="btn btn-secondary" onClick={clearAllAttendance} style={{ width: 'auto', padding: '0 8px', height: '30px', fontSize: '0.72rem' }}>
-                    Clear
-                  </button>
-                </div>
-              </div>
+                {/* Compact Attendance List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
+                  {players.map(p => {
+                    const rec = availabilityRecords[p.id] || { playerId: p.id, status: 'attending' };
+                    const isPartial = rec.status === 'unsure';
+                    const isAttending = rec.status === 'attending';
 
-              {/* Compact Attendance Rows List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '340px', overflowY: 'auto' }}>
-                {players.map(p => {
-                  const rec = availabilityRecords[p.id] || { playerId: p.id, status: 'attending' };
-                  const isPartial = rec.status === 'unsure';
-                  const isAttending = rec.status === 'attending';
-
-                  return (
-                    <div key={p.id} className="attendance-compact-row">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800 }}>{p.name}</span>
-                        {p.workloadRestriction?.restrictedBowler && (
-                          <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Restricted</span>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={async () => {
-                            try {
-                              const link = await RsvpInvitationService.getShareableLink('sess-temp', p.id);
-                              if (navigator.clipboard) await navigator.clipboard.writeText(link);
-                              alert(`Copied 1-on-1 RSVP link for ${p.name}:\n${link}`);
-                            } catch (err: any) {
-                              alert(err.message || 'Error generating RSVP link.');
-                            }
-                          }}
-                          style={{ width: 'auto', padding: '0 6px', height: '28px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          title={`Generate 1-on-1 RSVP link for ${p.name}`}
-                        >
-                          <Link size={12} /> Share Link
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => setEditingPlayerSettingsId(p.id)}
-                          style={{ width: 'auto', padding: '0 6px', height: '28px', fontSize: '0.7rem' }}
-                        >
-                          ⚙ Role
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextStatus = isAttending ? 'not_attending' : rec.status === 'not_attending' ? 'unsure' : 'attending';
-                            handleUpdateAvailability(p.id, { status: nextStatus });
-                          }}
-                          className={`badge ${isAttending ? 'badge-green' : isPartial ? 'badge-gold' : 'badge-warning'}`}
-                          style={{ cursor: 'pointer', padding: '4px 10px', fontSize: '0.75rem', fontWeight: 800 }}
-                        >
-                          {isAttending ? 'Attending' : isPartial ? 'Partial' : 'Unavailable'}
-                        </button>
-                      </div>
-
-                      {/* Reveal Partial Availability inputs only when Partial is chosen */}
-                      {isPartial && (
-                        <div style={{ gridColumn: '1 / -1', marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.75rem' }}>
-                          <span>Available:</span>
-                          <input
-                            type="time"
-                            value={rec.expectedArrivalTime || startTime}
-                            onChange={e => handleUpdateAvailability(p.id, { expectedArrivalTime: e.target.value })}
-                            style={{ padding: '2px 4px', borderRadius: '4px', background: 'var(--bg-surface-elevated)', color: '#fff', border: '1px solid var(--border-light)' }}
-                          />
-                          <span>to</span>
-                          <input
-                            type="time"
-                            value={rec.expectedDepartureTime || finishTime}
-                            onChange={e => handleUpdateAvailability(p.id, { expectedDepartureTime: e.target.value })}
-                            style={{ padding: '2px 4px', borderRadius: '4px', background: 'var(--bg-surface-elevated)', color: '#fff', border: '1px solid var(--border-light)' }}
-                          />
+                    return (
+                      <div key={p.id} className="attendance-compact-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-surface-elevated)', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{p.name}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            {p.primaryRole.replace(/_/g, ' ')}
+                          </span>
+                          {p.workloadRestriction?.restrictedBowler && (
+                            <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>Restricted</span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <button className="btn btn-secondary" onClick={() => setStep(1)} style={{ flex: 1 }}>← Back</button>
-                <button className="btn btn-gold" onClick={() => setStep(3)} style={{ flex: 2 }}>Continue to Plan →</button>
-              </div>
-            </div>
-          )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={async () => {
+                              try {
+                                const link = await RsvpInvitationService.getShareableLink('sess-temp', p.id);
+                                if (navigator.clipboard) await navigator.clipboard.writeText(link);
+                                showToast(`Copied RSVP link for ${p.name}!`, 'success');
+                              } catch (err: any) {
+                                showToast(err.message || 'Error generating link.', 'error');
+                              }
+                            }}
+                            style={{ width: 'auto', padding: '0 6px', height: '26px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            title={`Generate 1-on-1 RSVP link for ${p.name}`}
+                          >
+                            <Link size={12} /> Link
+                          </button>
 
-          {/* STEP 3: Collapsible Training Plan */}
-          {step === 3 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>TRAINING PLAN</h3>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {engineOutput?.rotationBlocks.length || 0} rotations · {sessionDurationMins} minutes · {attendingPlayers.length} players · {activeResources.length} areas
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextStatus = isAttending ? 'not_attending' : rec.status === 'not_attending' ? 'unsure' : 'attending';
+                              handleUpdateAvailability(p.id, { status: nextStatus });
+                            }}
+                            className={`badge ${isAttending ? 'badge-green' : isPartial ? 'badge-gold' : 'badge-warning'}`}
+                            style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.75rem', fontWeight: 800 }}
+                          >
+                            {isAttending ? 'Attending' : isPartial ? 'Partial' : 'Unavailable'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
+
+              {/* Live Generated Plan Preview */}
+              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)', borderLeft: '4px solid var(--accent-gold)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase' }}>
+                      GENERATED PLAN PREVIEW
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', marginTop: '2px' }}>
+                      {engineOutput?.rotationBlocks.length || 0} Rotations · {sessionDurationMins} Mins · {getPlanBalanceLabel(feasibilityResult.fairBattingMinutesPerPlayer)}
+                    </div>
+                  </div>
+                  <span className={`badge ${feasibilityResult.isFeasible ? 'badge-green' : 'badge-warning'}`}>
+                    {feasibilityResult.isFeasible ? 'Feasible' : 'Tight Capacity'}
+                  </span>
+                </div>
+
+                {/* Plain-English Rationale Collapsible */}
+                {rationale && (
+                  <div style={{ marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowRationale(prev => !prev)}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', padding: 0 }}
+                    >
+                      {showRationale ? '▼ Hide Plan Rationale' : '▶ Why this plan?'}
+                    </button>
+                    {showRationale && (
+                      <div style={{ background: 'var(--bg-surface-elevated)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: 1.4 }}>
+                        {rationale}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {activeResources.find(r => r.supportsCentreWicket) && (
@@ -681,37 +669,37 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
               )}
 
               {/* Collapsible Rotation Blocks */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {engineOutput?.rotationBlocks.map(block => {
                   const isExp = expandedBlockId === block.blockId;
 
                   return (
-                    <div key={block.blockId} className="card" style={{ padding: '12px', background: 'var(--bg-surface-card)' }}>
-                      <div 
+                    <div key={block.blockId} className="card" style={{ padding: '10px 12px', background: 'var(--bg-surface-card)' }}>
+                      <div
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                         onClick={() => setExpandedBlockId(isExp ? null : block.blockId)}
                       >
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>
+                          <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-main)' }}>
                             BLOCK {block.blockIndex + 1} ({block.startTime}–{block.endTime})
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                            {block.resourceAssignments.length} areas active · {block.durationMinutes} min
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                            {block.resourceAssignments.length} areas · {block.durationMinutes} min
                           </div>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="btn btn-secondary" style={{ width: 'auto', padding: '0 8px', height: '28px', fontSize: '0.72rem' }}>
-                            {isExp ? 'Hide Details' : 'View Players'}
+                          <span className="btn btn-secondary" style={{ width: 'auto', padding: '0 8px', height: '24px', fontSize: '0.7rem' }}>
+                            {isExp ? 'Hide' : 'View'}
                           </span>
-                          {isExp ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          {isExp ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </div>
                       </div>
 
                       {isExp && (
-                        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           {block.resourceAssignments.map(res => (
-                            <div key={res.resourceId} style={{ background: 'var(--bg-surface-elevated)', padding: '8px 10px', borderRadius: '6px', fontSize: '0.78rem' }}>
+                            <div key={res.resourceId} style={{ background: 'var(--bg-surface-elevated)', padding: '6px 8px', borderRadius: '6px', fontSize: '0.75rem' }}>
                               <div style={{ fontWeight: 800, color: 'var(--accent-gold)' }}>{res.resourceName}</div>
                               <div style={{ color: 'var(--text-main)', marginTop: '2px' }}>
                                 <strong>Batters:</strong> {res.batterPlayerIds.map(id => players.find(p => p.id === id)?.name).join(', ') || 'None'}
@@ -728,198 +716,31 @@ export const ClubSessionWizard: React.FC<ClubSessionWizardProps> = ({
                 })}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <button className="btn btn-secondary" onClick={() => setStep(2)} style={{ flex: 1 }}>← Back</button>
-                <button className="btn btn-gold" onClick={() => setStep(4)} disabled={!engineOutput} style={{ flex: 2 }}>Review Plan →</button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Review & Start Session */}
-          {step === 4 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Primary Session Ready Hero Card */}
-              <div className="card" style={{ padding: '16px', borderLeft: '4px solid #4ade80', background: 'var(--bg-surface-card)' }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <UserCheck size={20} /> SESSION READY
-                </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginTop: '4px' }}>
-                  {sessionDurationMins} minutes · {attendingPlayers.length} players · {activeResources.length} training areas · {engineOutput?.rotationBlocks.length || 0} rotations
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  <div>✓ Everyone allocated</div>
-                  <div>✓ Workload restrictions respected</div>
-                  <div>✓ Batting opportunities balanced</div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '14px', marginTop: '10px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowPlanningChecks(!showPlanningChecks)}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    {showPlanningChecks ? 'Hide planning details' : 'View planning details'} {showPlanningChecks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowRationale(!showRationale)}
-                    disabled={!rationale}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', fontSize: '0.75rem', fontWeight: 700, cursor: rationale ? 'pointer' : 'default', opacity: rationale ? 1 : 0.5, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    {showRationale ? 'Hide why this plan?' : 'Why this plan?'} {showRationale ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Why This Plan? Rationale Drawer */}
-              {showRationale && rationale && (
-                <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-elevated)' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    WHY THIS PLAN?
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: 1.5 }}>
-                    {rationale}
-                  </div>
-                </div>
-              )}
-
-              {/* Optional Planning Checks Drawer */}
-              {showPlanningChecks && engineOutput && (
-                <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-elevated)' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-gold)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    PLANNING CHECKS
-                  </div>
-                  {(() => {
-                    const { theoreticalCapacityMinutes, staffableCapacityMinutes, actuallyAllocatedCapacityMinutes, unusedCapacityMinutes } = engineOutput.capacityMetrics;
-                    const isOverAllocated = actuallyAllocatedCapacityMinutes > staffableCapacityMinutes;
-                    const overAmount = actuallyAllocatedCapacityMinutes - staffableCapacityMinutes;
-
-                    return (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem' }}>
-                        <div><span style={{ color: 'var(--text-muted)' }}>Theoretical capacity:</span> <strong>{theoreticalCapacityMinutes} min</strong></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>Staffable capacity:</span> <strong>{staffableCapacityMinutes} min</strong></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>Allocated capacity:</span> <strong>{actuallyAllocatedCapacityMinutes} min</strong></div>
-                        <div>
-                          <span style={{ color: 'var(--text-muted)' }}>{isOverAllocated ? 'Capacity status:' : 'Unused capacity:'}</span>{' '}
-                          <strong style={{ color: isOverAllocated ? '#ef4444' : '#4ade80' }}>
-                            {isOverAllocated ? `Over by ${overAmount} min` : `${unusedCapacityMinutes} min`}
-                          </strong>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Player Opportunity / Fairness Summary */}
-              <div className="card" style={{ padding: '14px', background: 'var(--bg-surface-card)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800 }}>PLAYER OPPORTUNITY</h4>
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {getPlanBalanceLabel(engineOutput?.explainablePlanScore ?? 85)}
-                    </div>
-                  </div>
-                  <span className="badge badge-gold" style={{ fontSize: '0.9rem', fontWeight: 800 }}>
-                    {engineOutput?.explainablePlanScore || 85} / 100
-                  </span>
-                </div>
-              </div>
-
-              {/* Primary Sticky Launch Action */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setStep(3)}
-                  style={{ flex: '1 1 100px', minHeight: '40px', padding: '0 8px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
-                >
-                  ← Back
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <button className="btn btn-secondary" onClick={() => setStep(1)} style={{ flex: 1 }}>
+                  ← Back to Setup
                 </button>
                 <button
                   className="btn btn-secondary"
-                  onClick={() => void handleFinalise('save')}
-                  disabled={isSubmitting}
-                  style={{ flex: '1 1 110px', minHeight: '40px', padding: '0 8px', fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                  onClick={() => handleFinalise('save')}
+                  disabled={isSubmitting || !engineOutput}
+                  style={{ flex: 1 }}
                 >
-                  Save Plan
+                  Save Draft Plan
                 </button>
                 <button
-                  className="btn btn-gold"
-                  onClick={() => void handleFinalise('launch')}
-                  disabled={isSubmitting}
-                  style={{ flex: '2 1 150px', minHeight: '40px', padding: '0 12px', fontSize: '0.82rem', fontWeight: 800, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  className="btn btn-live"
+                  onClick={() => handleFinalise('launch')}
+                  disabled={isSubmitting || !engineOutput}
+                  style={{ flex: 2 }}
                 >
-                  <Check size={16} /> {isSubmitting ? 'Saving…' : 'Start Session'}
+                  <Play size={16} /> Launch Live Session
                 </button>
               </div>
             </div>
           )}
         </div>
-
-        {/* Player Role Override Settings Modal */}
-        {editingPlayerSettingsId && (
-          <div className="bottom-sheet-overlay" onClick={() => setEditingPlayerSettingsId(null)}>
-            <div className="bottom-sheet-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
-                  TRAINING SETTINGS — {players.find(p => p.id === editingPlayerSettingsId)?.name}
-                </h3>
-                <button onClick={() => setEditingPlayerSettingsId(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-                  <X size={18} />
-                </button>
-              </div>
-
-              {(() => {
-                const staff = staffAssignments[editingPlayerSettingsId] || {
-                  playerId: editingPlayerSettingsId,
-                  trainingBattingRole: 'general_rotation',
-                  trainingBowlingRole: 'general_rotation',
-                  bowlingTrainingBand: 'band_1_primary'
-                };
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Batting Role</label>
-                      <select
-                        value={staff.trainingBattingRole}
-                        onChange={e => handleUpdateStaffAssignment(editingPlayerSettingsId, { trainingBattingRole: e.target.value as any })}
-                        style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '2px', fontSize: '0.8rem' }}
-                      >
-                        <option value="top_order_prep">Top-Order Prep</option>
-                        <option value="middle_order_prep">Middle-Order Prep</option>
-                        <option value="finishing_practice">Finishing Practice</option>
-                        <option value="general_rotation">General Rotation</option>
-                        <option value="none">No Batting</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Bowling Role</label>
-                      <select
-                        value={staff.trainingBowlingRole}
-                        onChange={e => handleUpdateStaffAssignment(editingPlayerSettingsId, { trainingBowlingRole: e.target.value as any })}
-                        style={{ width: '100%', padding: '6px', background: 'var(--bg-surface-card)', color: '#fff', border: '1px solid var(--border-light)', borderRadius: '6px', marginTop: '2px', fontSize: '0.8rem' }}
-                      >
-                        <option value="pace_focus">Pace Focus</option>
-                        <option value="spin_focus">Spin Focus</option>
-                        <option value="new_ball_focus">New-Ball Focus</option>
-                        <option value="death_bowling_focus">Death Bowling</option>
-                        <option value="general_rotation">General Rotation</option>
-                        <option value="none">No Bowling</option>
-                      </select>
-                    </div>
-
-                    <button className="btn btn-gold" onClick={() => setEditingPlayerSettingsId(null)} style={{ marginTop: '6px' }}>
-                      Done
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

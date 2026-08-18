@@ -11,6 +11,7 @@ import { RuleSetAssignmentService } from '../../../modules/competition-rules/ass
 import { CompetitionRuleRepository } from '../../../modules/competition-rules/storage/competitionRuleRepository';
 import { RulesReviewModal } from './RulesReviewModal';
 import { ManualRuleEntryModal } from './ManualRuleEntryModal';
+import { useToast } from '../../common/Toast';
 
 interface RulesManagementViewProps {
   clubId?: string;
@@ -25,6 +26,7 @@ export const RulesManagementView: React.FC<RulesManagementViewProps> = ({
   userRole = 'head_coach',
   season = '2026/27'
 }) => {
+  const { showToast } = useToast();
   const [selectedSeason, setSelectedSeason] = useState(season);
   const competitionName = 'Warragul & District Cricket Association';
   const [gradeName, setGradeName] = useState('Division 1');
@@ -183,8 +185,9 @@ export const RulesManagementView: React.FC<RulesManagementViewProps> = ({
       });
       setIsReviewModalOpen(false);
       refreshData();
+      showToast('Rule set approved and assigned.', 'success');
     } else if (result.error) {
-      alert(result.error);
+      showToast(result.error, 'error');
     }
   };
 

@@ -196,6 +196,7 @@ export const ClubTrainingPlanner: React.FC<ClubTrainingPlannerProps> = ({
           savedTemplates={savedTemplates}
           rollingLedger={rollingLedger}
           selectedTemplate={selectedTemplate}
+          currentSession={currentSession}
           onFinalise={(session, action) => {
             onSaveSession(session);
             if (action === 'launch') onStartLive(session);

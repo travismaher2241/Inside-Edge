@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ClubTrainingSession, DevelopmentFocus, MatchRecord, Player, TrainingResource, Team, ClubTeam, ActiveScope } from '../types/cricket';
-import { ChevronRight, Dumbbell, Play, Sparkles, Trophy, Users, BookOpen, Shield, ShieldAlert } from 'lucide-react';
+import { ChevronRight, Dumbbell, Play, Sparkles, Trophy, Users, BookOpen, Shield, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { calculateSessionReadiness, getSessionDuration } from '../modules/cricket/sessionModel';
 import { getPlayersForScope, groupPlayersByTeam } from '../modules/cricket/scopeHelpers';
 
@@ -254,7 +254,7 @@ export const deriveHomeState = ({
           dayName: dateObj.toLocaleDateString(undefined, { weekday: 'short' }),
           dayNum: dateObj.getDate().toString(),
           title: `vs ${m.opponent}`,
-          subtext: `1:00 PM · ${m.venue}`,
+          subtext: `${m.format} · ${m.venue}`,
           type: 'match'
         });
       }
@@ -302,13 +302,13 @@ export const deriveHomeState = ({
 
 export const HomeView: React.FC<HomeViewProps> = ({
   session,
-  match: _match,
+  match,
   matches = [],
   sessions = [],
   players = [],
   focuses = [],
-  resources: _resources,
-  team: _team,
+  resources = [],
+  team,
   clubTeams = [],
   activeScope = { mode: 'team', teamId: 'ct-1' },
   onStartLiveSession,
@@ -317,24 +317,46 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onNavigateToTeam,
   onNavigateToLibrary
 }) => {
-  // Filter players according to current team context vs club context
+  const isClubView = activeScope.mode === 'club';
   const scopePlayers = getPlayersForScope(players, activeScope);
-
-  // Group teams for Club Overview
   const teamGroups = groupPlayersByTeam(clubTeams, players);
 
-  const activeLiveSession = sessions.find(s => s.status === 'live' || (s.currentLiveState && !s.currentLiveState.isPaused));
+  const homeState = deriveHomeState({
+    session,
+    match,
+    matches,
+    sessions,
+    players,
+    focuses,
+    resources,
+    team,
+    activeScope
+  });
 
-  const isClubView = activeScope.mode === 'club';
+  const handleQuickAction = (action: QuickActionItem['action']) => {
+    switch (action) {
+      case 'train':
+        onNavigateToTrain();
+        break;
+      case 'match':
+        onNavigateToMatch();
+        break;
+      case 'team':
+        onNavigateToTeam();
+        break;
+      case 'library':
+        (onNavigateToLibrary || onNavigateToTrain)();
+        break;
+    }
+  };
 
   return (
     <div className="home-container" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      {/* ========================================================= */}
-      {/* CLUB OVERVIEW CONTEXT HOME VIEW */}
-      {/* ========================================================= */}
       {isClubView ? (
+        /* ========================================================= */
+        /* CLUB OVERVIEW CONTEXT HOME VIEW */
+        /* ========================================================= */
         <>
-          {/* Club Header Hero */}
           <div className="home-primary-card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
             <div className="home-primary-badge-row">
               <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -360,7 +382,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </div>
 
-          {/* Teams Needing Attention (Summarised by Team) */}
           <section className="home-section">
             <div className="home-section-header">
               <span>TEAMS NEEDING ATTENTION</span>
@@ -393,7 +414,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           </section>
 
-          {/* Upcoming Club Fixtures */}
           {matches.length > 0 && (
             <section className="home-section">
               <div className="home-section-header">
@@ -422,19 +442,21 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </>
       ) : (
         /* ========================================================= */
-        /* TEAM CONTEXT HOME VIEW (Strictly Team Scoped) */
+        /* TEAM CONTEXT HOME VIEW (Strictly Team Scoped via deriveHomeState) */
         /* ========================================================= */
         <>
-          {activeLiveSession && (
+          {homeState.primaryContextType === 'IN_PROGRESS' && homeState.primarySession && (
             <div className="home-primary-card" style={{ borderLeft: '4px solid var(--status-live)' }}>
               <div className="home-primary-badge-row">
                 <span className="badge badge-live" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
                   SESSION IN PROGRESS
                 </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{getSessionDuration(activeLiveSession)} mins</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  {getSessionDuration(homeState.primarySession)} mins
+                </span>
               </div>
-              <h2 className="home-primary-title">{activeLiveSession.title}</h2>
+              <h2 className="home-primary-title">{homeState.primarySession.title}</h2>
               <div className="home-primary-actions" style={{ marginTop: '12px' }}>
                 <button className="btn btn-live" onClick={onStartLiveSession}>
                   <Play size={18} /> CONTINUE SESSION
@@ -446,15 +468,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           )}
 
-          {!activeLiveSession && session && (
+          {homeState.primaryContextType === 'MATCH_DAY' && homeState.primaryMatch && (
+            <div className="home-primary-card" style={{ borderLeft: '4px solid var(--accent-gold)' }}>
+              <div className="home-primary-badge-row">
+                <span className="badge badge-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Trophy size={14} /> MATCH DAY
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Today</span>
+              </div>
+              <h2 className="home-primary-title">vs {homeState.primaryMatch.opponent}</h2>
+              <div className="home-primary-meta">
+                <span>{homeState.primaryMatch.format}</span>
+                <span>·</span>
+                <span>{homeState.primaryMatch.venue}</span>
+              </div>
+              <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+                <button className="btn btn-gold" onClick={onNavigateToMatch}>
+                  <Trophy size={18} /> OPEN MATCH PREP
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(homeState.primaryContextType === 'TRAINING_TODAY' || homeState.primaryContextType === 'TRAINING_UPCOMING') && homeState.primarySession && (
             <div className="home-primary-card">
               <div className="home-primary-badge-row">
-                <span className="badge badge-green">NEXT TRAINING</span>
+                <span className="badge badge-green">
+                  {homeState.primaryContextType === 'TRAINING_TODAY' ? 'TRAINING TODAY' : 'NEXT TRAINING'}
+                </span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  {formatShortDate(session.date, session.startTime)}
+                  {formatShortDate(homeState.primarySession.date, homeState.primarySession.startTime)}
                 </span>
               </div>
-              <h2 className="home-primary-title">{session.title}</h2>
+              <h2 className="home-primary-title">{homeState.primarySession.title}</h2>
               <div className="home-primary-meta">
                 <span>{scopePlayers.length} Team Players</span>
               </div>
@@ -469,7 +515,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           )}
 
-          {!activeLiveSession && !session && (
+          {homeState.primaryContextType === 'MATCH_REVIEW' && homeState.primaryMatch && (
+            <div className="home-primary-card" style={{ borderLeft: '4px solid #3b82f6' }}>
+              <div className="home-primary-badge-row">
+                <span className="badge badge-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <CheckCircle2 size={14} color="#60a5fa" /> MATCH REVIEW
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Review Pending</span>
+              </div>
+              <h2 className="home-primary-title">vs {homeState.primaryMatch.opponent}</h2>
+              <div className="home-primary-meta">
+                <span>{homeState.primaryMatch.result ? `Result: ${homeState.primaryMatch.result}` : 'Completed'}</span>
+              </div>
+              <div className="home-primary-actions" style={{ marginTop: '12px' }}>
+                <button className="btn btn-secondary" onClick={onNavigateToMatch}>
+                  COMPLETE REVIEW
+                </button>
+              </div>
+            </div>
+          )}
+
+          {homeState.primaryContextType === 'NO_SESSION' && (
             <div className="home-primary-card prompt-card">
               <div className="home-primary-badge-row">
                 <span className="badge badge-gold">GET READY</span>
@@ -485,37 +551,37 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           {/* Quick Actions Grid */}
           <div className="quick-actions-grid">
-            <button className="quick-action-btn" onClick={onNavigateToTrain}>
-              <div className="quick-action-icon"><Dumbbell size={18} /></div>
-              <span>Plan Session</span>
-            </button>
-            <button className="quick-action-btn" onClick={() => (onNavigateToLibrary || onNavigateToTrain)()}>
-              <div className="quick-action-icon"><BookOpen size={18} /></div>
-              <span>Drill Library</span>
-            </button>
-            <button className="quick-action-btn" onClick={onNavigateToMatch}>
-              <div className="quick-action-icon"><Trophy size={18} /></div>
-              <span>Match Prep</span>
-            </button>
-            <button className="quick-action-btn" onClick={onNavigateToTeam}>
-              <div className="quick-action-icon"><Users size={18} /></div>
-              <span>Roster ({scopePlayers.length})</span>
-            </button>
+            {homeState.quickActions.map(qa => (
+              <button key={qa.id} className="quick-action-btn" onClick={() => handleQuickAction(qa.action)}>
+                <div className="quick-action-icon">
+                  {qa.icon === 'train' && <Dumbbell size={18} />}
+                  {qa.icon === 'drill' && <BookOpen size={18} />}
+                  {qa.icon === 'match' && <Trophy size={18} />}
+                  {qa.icon === 'team' && <Users size={18} />}
+                </div>
+                <span>{qa.label}</span>
+              </button>
+            ))}
           </div>
 
-          {/* Player Workload & Attention for Team */}
-          {scopePlayers.some(p => p.workloadRestriction?.restrictedBowler) && (
+          {/* Player Workload & Coaching Notes */}
+          {homeState.coachingNotes.length > 0 && (
             <section className="home-section">
               <div className="home-section-header">
-                <span>WORKLOAD RESTRICTIONS</span>
+                <span>WORTH A LOOK</span>
                 <ShieldAlert size={14} color="#f97316" />
               </div>
               <div className="home-insight-card">
-                {scopePlayers.filter(p => p.workloadRestriction?.restrictedBowler).map(p => (
-                  <div key={p.id} className="home-insight-row gold-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
+                {homeState.coachingNotes.map(n => (
+                  <div
+                    key={n.id}
+                    className="home-insight-row gold-accent"
+                    onClick={() => (n.target === 'train' ? onNavigateToTrain() : onNavigateToTeam())}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div className="home-insight-info">
-                      <div className="home-insight-title">{p.name}</div>
-                      <div className="home-insight-desc">{p.workloadRestriction?.notes || 'Bowling workload restriction active'}</div>
+                      <div className="home-insight-title">{n.title}</div>
+                      <div className="home-insight-desc">{n.description}</div>
                     </div>
                     <ChevronRight size={16} color="var(--text-muted)" />
                   </div>
@@ -525,27 +591,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
           )}
 
           {/* Player Focus Items for Team */}
-          {scopePlayers.some(p => focuses.some(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))) && (
+          {homeState.playerFocusItems.length > 0 && (
             <section className="home-section">
               <div className="home-section-header">
                 <span>PLAYER FOCUS</span>
                 <Sparkles size={14} color="var(--accent-gold)" />
               </div>
               <div className="home-insight-card">
-                {scopePlayers.filter(p => focuses.some(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))).slice(0, 3).map(p => {
-                  const pf = focuses.find(f => f.playerId === p.id && (f.state === 'CURRENT' || f.state === 'DEVELOPING'))!;
-                  return (
-                    <div key={p.id} className="home-insight-row green-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
-                      <div className="home-insight-info">
-                        <div className="home-insight-title">{p.name}</div>
-                        <div className="home-insight-desc">
-                          <strong style={{ color: 'var(--accent-gold)' }}>{pf.domain}:</strong> {pf.focusStatement}
-                        </div>
+                {homeState.playerFocusItems.map(pf => (
+                  <div key={pf.id} className="home-insight-row green-accent" onClick={onNavigateToTeam} style={{ cursor: 'pointer' }}>
+                    <div className="home-insight-info">
+                      <div className="home-insight-title">{pf.name}</div>
+                      <div className="home-insight-desc">
+                        <strong style={{ color: 'var(--accent-gold)' }}>{pf.domain}:</strong> {pf.focusStatement}
                       </div>
-                      <ChevronRight size={16} color="var(--text-muted)" />
                     </div>
-                  );
-                })}
+                    <ChevronRight size={16} color="var(--text-muted)" />
+                  </div>
+                ))}
               </div>
             </section>
           )}

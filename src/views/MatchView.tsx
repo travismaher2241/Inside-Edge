@@ -3,7 +3,7 @@ import type { MatchRecord, MatchObservation, Player, MatchSquad, OppositionBatte
 import type { TacticalContext, FieldSpot, BowlingPlan } from '../modules/cricket/tactics/types';
 import { deriveTrainingPriorities } from '../modules/cricket/matchHelpers';
 import { getMatchWorkflowStatus } from '../modules/cricket/matchWorkflow';
-import { StorageEngine } from '../storage/db';
+import { useRepository } from '../storage/RepositoryContext';
 import { CheckCircle2, ArrowRight, Sparkles, Plus, Trash2, X, Check, Save, Calendar, Trophy, Shield, Users, User, Target, ChevronRight } from 'lucide-react';
 
 import { MatchSquadSelector } from '../components/cricket/tactics/MatchSquadSelector';
@@ -40,6 +40,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
   onUpdateMatch,
   onApplyPrioritiesToSession
 }) => {
+  const repository = useRepository();
   const [viewMode, setViewMode] = useState<'fixtures' | 'roundup'>('fixtures');
   const currentMatch = matches.find(m => m.id === selectedMatchId) || matches[0];
 
@@ -67,11 +68,11 @@ export const MatchView: React.FC<MatchViewProps> = ({
 
   // Scoped Data State for Current Match
   const matchId = currentMatch?.id || 'match-1';
-  const [matchSquad, setMatchSquad] = useState<MatchSquad | undefined>(() => StorageEngine.getMatchSquad(matchId));
-  const [oppositionBatters, setOppositionBatters] = useState<OppositionBatter[]>(() => StorageEngine.getOppositionBatters(matchId));
-  const [rulesProfiles] = useState<CompetitionRulesProfile[]>(() => StorageEngine.getRulesProfiles());
+  const [matchSquad, setMatchSquad] = useState<MatchSquad | undefined>(() => repository.getMatchSquad(matchId));
+  const [oppositionBatters, setOppositionBatters] = useState<OppositionBatter[]>(() => repository.getOppositionBatters(matchId));
+  const [rulesProfiles] = useState<CompetitionRulesProfile[]>(() => repository.getRulesProfiles());
   const [selectedRulesProfileId, setSelectedRulesProfileId] = useState<string>('rules-t20-default');
-  const [savedTacticalPlans, setSavedTacticalPlans] = useState<SavedTacticalPlan[]>(() => StorageEngine.getSavedTacticalPlans(matchId));
+  const [savedTacticalPlans, setSavedTacticalPlans] = useState<SavedTacticalPlan[]>(() => repository.getSavedTacticalPlans(matchId));
 
   const [tacticalContext, setTacticalContext] = useState<TacticalContext>({
     batterHand: 'right',
@@ -96,9 +97,9 @@ export const MatchView: React.FC<MatchViewProps> = ({
     setMatchResultText(target?.result || '');
     setIsAddObservationOpen(false);
 
-    setMatchSquad(StorageEngine.getMatchSquad(id));
-    setOppositionBatters(StorageEngine.getOppositionBatters(id));
-    setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(id));
+    setMatchSquad(repository.getMatchSquad(id));
+    setOppositionBatters(repository.getOppositionBatters(id));
+    setSavedTacticalPlans(repository.getSavedTacticalPlans(id));
     setTacticalContext(previous => ({
       ...previous,
       format: target?.format === 'Two Day' ? 'multi_day' : target?.format === 'T20' ? 't20' : 'one_day',
@@ -698,7 +699,7 @@ export const MatchView: React.FC<MatchViewProps> = ({
                     players={players}
                     savedSquad={matchSquad}
                     onSaveSquad={squadData => {
-                      StorageEngine.saveMatchSquad(squadData);
+                      repository.saveMatchSquad(squadData);
                       setMatchSquad(squadData);
                       setTacticalStage(2);
                     }}
@@ -710,12 +711,12 @@ export const MatchView: React.FC<MatchViewProps> = ({
                     matchId={matchId}
                     batters={oppositionBatters}
                     onSaveBatter={batterData => {
-                      StorageEngine.saveOppositionBatter(batterData);
-                      setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                      repository.saveOppositionBatter(batterData);
+                      setOppositionBatters(repository.getOppositionBatters(matchId));
                     }}
                     onDeleteBatter={id => {
-                      StorageEngine.deleteOppositionBatter(id);
-                      setOppositionBatters(StorageEngine.getOppositionBatters(matchId));
+                      repository.deleteOppositionBatter(id);
+                      setOppositionBatters(repository.getOppositionBatters(matchId));
                     }}
                   />
                 )}
@@ -738,8 +739,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
                     context={tacticalContext}
                     savedPlans={savedTacticalPlans}
                     onSavePlan={planData => {
-                      StorageEngine.saveTacticalPlan(planData);
-                      setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                      repository.saveTacticalPlan(planData);
+                      setSavedTacticalPlans(repository.getSavedTacticalPlans(matchId));
                     }}
                     onOpenFieldBoard={(bowler, plan, positions) => {
                       setFieldBoardModalData({
@@ -779,8 +780,8 @@ export const MatchView: React.FC<MatchViewProps> = ({
                   updatedAt: new Date().toISOString(),
                   warnings: [],
                 };
-                StorageEngine.saveTacticalPlan(planToSave);
-                setSavedTacticalPlans(StorageEngine.getSavedTacticalPlans(matchId));
+                repository.saveTacticalPlan(planToSave);
+                setSavedTacticalPlans(repository.getSavedTacticalPlans(matchId));
                 setFieldBoardModalData({ isOpen: false });
               }}
             />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ClubTeam, MatchReport } from '../../types/cricket';
 import { getClubTeams, createClubTeam } from '../../modules/cricket/matchReportService';
 import { getLatestReport } from '../../modules/cricket/roundupAggregation';
-import { CloudStorageEngine } from '../../modules/cricket/cloudStorageEngine';
+import { useRepository } from '../../storage/RepositoryContext';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { FirebaseNotConfiguredBanner } from './FirebaseNotConfiguredBanner';
 import { Copy, Plus, Users, Share2, MoreVertical, ChevronDown, ChevronUp, Eye, EyeOff, Baby } from 'lucide-react';
@@ -12,6 +12,7 @@ interface ClubTeamManagerProps {
 }
 
 export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }) => {
+  const repository = useRepository();
   const [teams, setTeams] = useState<ClubTeam[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
@@ -49,7 +50,7 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
       const withJuniorMode = juniorModeOnCreate ? { ...created, juniorMode: true } : created;
       if (juniorModeOnCreate) {
         try {
-          await CloudStorageEngine.saveClubTeam(withJuniorMode);
+          await repository.saveClubTeam(withJuniorMode);
         } catch (err) {
           console.error('Failed to save junior mode flag:', err);
         }
@@ -68,7 +69,7 @@ export const ClubTeamManager: React.FC<ClubTeamManagerProps> = ({ reports = [] }
     const updated: ClubTeam = { ...t, juniorMode: !t.juniorMode };
     setTeams(current => current.map(item => item.id === t.id ? updated : item));
     try {
-      await CloudStorageEngine.saveClubTeam(updated);
+      await repository.saveClubTeam(updated);
       setFeedback(`${t.name} is now ${updated.juniorMode ? 'a Junior Team' : 'a Senior Team'}.`);
     } catch (err) {
       console.error('Failed to update junior mode:', err);
