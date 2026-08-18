@@ -12,9 +12,16 @@
 //     tactical plans. These have no Firestore counterpart, so both
 //     implementations read and write localStorage via StorageEngine.
 //
+// Reads of cloud-synced data are live: subscribeAll() opens every Firestore
+// listener at once and hands back a single unsubscribe.
+//
 // Views never import StorageEngine or CloudStorageEngine directly; they take a
 // repository from useRepository() and the mode is chosen once, in App.tsx.
 import type {
+  Team,
+  Activity,
+  TrainingResource,
+  CoachRole,
   Player,
   MatchRecord,
   DevelopmentFocus,
@@ -32,7 +39,26 @@ import type {
 import { StorageEngine } from './db';
 import { CloudStorageEngine } from '../modules/cricket/cloudStorageEngine';
 
+/** Live cloud-synced collections, delivered as whole-collection snapshots. */
+export interface RepositorySubscriptionHandlers {
+  onTeam: (team: Team) => void;
+  onPlayers: (players: Player[]) => void;
+  onActivities: (activities: Activity[]) => void;
+  onMatches: (matches: MatchRecord[]) => void;
+  onDevelopmentFocuses: (focuses: DevelopmentFocus[]) => void;
+  onObservations: (observations: Observation[]) => void;
+  onClubTeams: (teams: ClubTeam[]) => void;
+  onTrainingResources: (resources: TrainingResource[]) => void;
+  onClubSessions: (sessions: ClubTrainingSession[]) => void;
+  onFairnessLedger: (ledger: RollingFairnessLedger[]) => void;
+  onTemplates: (templates: SavedClubTemplate[]) => void;
+  onFieldSettings: (settings: SavedFieldSetting[]) => void;
+}
+
 export interface ICricketRepository {
+  /** Opens every cloud listener. Returns one unsubscribe for all of them. */
+  subscribeAll(role: CoachRole, handlers: RepositorySubscriptionHandlers): () => void;
+
   // Local-only reads
   getMatchSquad(matchId: string): MatchSquad | undefined;
   getOppositionBatters(matchId: string): OppositionBatter[];
@@ -97,6 +123,10 @@ abstract class BaseCricketRepository {
  * sign-out, which is what "test access" means here.
  */
 export class LocalCricketRepository extends BaseCricketRepository implements ICricketRepository {
+  subscribeAll(_role: CoachRole, _handlers: RepositorySubscriptionHandlers): () => void {
+    return () => {};
+  }
+
   async addPlayer(_player: Player): Promise<void> {}
   async updatePlayer(_player: Player): Promise<void> {}
   async addMatch(_match: MatchRecord): Promise<void> {}
@@ -115,6 +145,24 @@ export class LocalCricketRepository extends BaseCricketRepository implements ICr
 
 /** Signed-in mode. Cloud-synced writes go to Firestore. */
 export class CloudCricketRepository extends BaseCricketRepository implements ICricketRepository {
+  subscribeAll(role: CoachRole, handlers: RepositorySubscriptionHandlers): () => void {
+    const unsubscribes = [
+      CloudStorageEngine.subscribeToTeam(handlers.onTeam),
+      CloudStorageEngine.subscribeToPlayers(handlers.onPlayers),
+      CloudStorageEngine.subscribeToActivities(handlers.onActivities),
+      CloudStorageEngine.subscribeToMatches(handlers.onMatches),
+      CloudStorageEngine.subscribeToDevelopmentFocuses(role, handlers.onDevelopmentFocuses),
+      CloudStorageEngine.subscribeToObservations(role, handlers.onObservations),
+      CloudStorageEngine.subscribeToClubTeams(handlers.onClubTeams),
+      CloudStorageEngine.subscribeToTrainingResources(handlers.onTrainingResources),
+      CloudStorageEngine.subscribeToClubSessions(handlers.onClubSessions),
+      CloudStorageEngine.subscribeToFairnessLedger(handlers.onFairnessLedger),
+      CloudStorageEngine.subscribeToSavedClubTemplates(handlers.onTemplates),
+      CloudStorageEngine.subscribeToSavedFieldSettings(handlers.onFieldSettings)
+    ];
+    return () => unsubscribes.forEach(unsubscribe => unsubscribe());
+  }
+
   async addPlayer(player: Player): Promise<void> {
     await CloudStorageEngine.addPlayer(player);
   }

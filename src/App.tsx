@@ -7,7 +7,7 @@ import {
   logoutCoach,
   type CoachProfileLoadError
 } from './modules/cricket/authService';
-import { CloudStorageEngine, seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
+import { seedDefaultFirestoreIfEmpty } from './modules/cricket/cloudStorageEngine';
 import type { Team, Player, Activity, MatchRecord, DevelopmentFocus, Observation, FocusLifecycleState, CoachUser, ClubTeam, TrainingResource, ClubTrainingSession, RollingFairnessLedger, SavedClubTemplate, SavedFieldSetting, ActiveScope } from './types/cricket';
 import { getActiveMatch } from './modules/cricket/matchHelpers';
 import { AppShell } from './components/layout/AppShell';
@@ -132,43 +132,29 @@ export function App() {
     return () => unsubProfile();
   }, [authUser]);
 
-  // 3. Subscribe to Firestore cloud data when signed in
+  // 3. Subscribe to cloud data when signed in. In Test Access the repository's
+  //    subscribeAll is a no-op, so no mode check is needed here.
   useEffect(() => {
-    if (isTestMode || !authUser || !coachProfile) return;
+    if (!authUser || !coachProfile) return;
 
-    const role = coachProfile.role;
-
-    const unsubTeam = CloudStorageEngine.subscribeToTeam(setTeam);
-    const unsubPlayers = CloudStorageEngine.subscribeToPlayers(setPlayers);
-    const unsubActivities = CloudStorageEngine.subscribeToActivities(setActivities);
-    const unsubMatches = CloudStorageEngine.subscribeToMatches(setMatches);
-    const unsubFocuses = CloudStorageEngine.subscribeToDevelopmentFocuses(role, setFocuses);
-    const unsubObs = CloudStorageEngine.subscribeToObservations(role, setObservations);
-    const unsubClubTeams = CloudStorageEngine.subscribeToClubTeams(setClubTeams);
-    const unsubResources = CloudStorageEngine.subscribeToTrainingResources(setTrainingResources);
-    const unsubClubSessions = CloudStorageEngine.subscribeToClubSessions(sessions => {
-      setClubSessions(sessions);
-      setCurrentClubSessionId(current => current && sessions.some(session => session.id === current && session.status !== 'completed') ? current : sessions.find(session => session.status !== 'completed')?.id);
+    return repository.subscribeAll(coachProfile.role, {
+      onTeam: setTeam,
+      onPlayers: setPlayers,
+      onActivities: setActivities,
+      onMatches: setMatches,
+      onDevelopmentFocuses: setFocuses,
+      onObservations: setObservations,
+      onClubTeams: setClubTeams,
+      onTrainingResources: setTrainingResources,
+      onClubSessions: sessions => {
+        setClubSessions(sessions);
+        setCurrentClubSessionId(current => current && sessions.some(session => session.id === current && session.status !== 'completed') ? current : sessions.find(session => session.status !== 'completed')?.id);
+      },
+      onFairnessLedger: setFairnessLedger,
+      onTemplates: setSavedClubTemplates,
+      onFieldSettings: setSavedFieldSettings
     });
-    const unsubFairness = CloudStorageEngine.subscribeToFairnessLedger(setFairnessLedger);
-    const unsubTemplates = CloudStorageEngine.subscribeToSavedClubTemplates(setSavedClubTemplates);
-    const unsubFieldSettings = CloudStorageEngine.subscribeToSavedFieldSettings(setSavedFieldSettings);
-
-    return () => {
-      unsubTeam();
-      unsubPlayers();
-      unsubActivities();
-      unsubMatches();
-      unsubFocuses();
-      unsubObs();
-      unsubClubTeams();
-      unsubResources();
-      unsubClubSessions();
-      unsubFairness();
-      unsubTemplates();
-      unsubFieldSettings();
-    };
-  }, [authUser, coachProfile, isTestMode]);
+  }, [authUser, coachProfile, repository]);
 
   const currentClubSession = useMemo(
     () => selectCurrentClubSession(clubSessions, currentClubSessionId),
